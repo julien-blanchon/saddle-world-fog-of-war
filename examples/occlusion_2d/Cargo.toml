@@ -1,0 +1,13 @@
+[package]
+name = "saddle-world-fog-of-war-example-occlusion-2d"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+bevy = { workspace = true }
+saddle-world-fog-of-war = { workspace = true }
+saddle-world-fog-of-war-example-support = { path = "../support" }
+
+[lints]
+workspace = true

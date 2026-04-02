@@ -1,0 +1,20 @@
+[workspace]
+members = [
+    "support",
+    "basic_2d",
+    "occlusion_2d",
+    "rts_large_map",
+    "projected_3d",
+    "vision_cones",
+    "lab",
+]
+resolver = "3"
+
+[workspace.dependencies]
+bevy = "0.18"
+saddle-world-fog-of-war = { path = ".." }
+
+[workspace.lints.clippy]
+too_many_arguments = "allow"
+type_complexity = "allow"
+nonstandard_macro_braces = "warn"
