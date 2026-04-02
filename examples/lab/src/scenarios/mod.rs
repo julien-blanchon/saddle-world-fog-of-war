@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_e2e::{action::Action, actions::assertions, scenario::Scenario};
+use saddle_bevy_e2e::{action::Action, actions::assertions, scenario::Scenario};
 use saddle_world_fog_of_war::{FogLayerId, FogOfWarMap, FogOfWarRenderAssets, FogVisibilityState};
 
 use crate::{
