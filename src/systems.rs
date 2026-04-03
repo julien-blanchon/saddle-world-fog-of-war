@@ -86,7 +86,9 @@ pub(crate) fn collect_inputs(
         enabled_cell_sources += 1;
         for layer in cell_source.layers.iter_layers() {
             for cell in &cell_source.cells {
-                collected.cell_sources.push(VisionCellSample { layer, cell: *cell });
+                collected
+                    .cell_sources
+                    .push(VisionCellSample { layer, cell: *cell });
             }
         }
     }
