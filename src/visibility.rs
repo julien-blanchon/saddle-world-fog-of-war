@@ -16,6 +16,12 @@ pub(crate) struct VisionSourceSample {
 }
 
 #[derive(Debug, Clone, Copy)]
+pub(crate) struct VisionCellSample {
+    pub layer: crate::grid::FogLayerId,
+    pub cell: IVec2,
+}
+
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct VisionOccluderSample {
     pub layers: FogLayerMask,
     pub position: Vec2,
@@ -62,9 +68,17 @@ pub(crate) fn rebuild_blockers(map: &mut FogOfWarMap, occluders: &[VisionOcclude
     }
 }
 
-pub(crate) fn accumulate_visibility(map: &mut FogOfWarMap, sources: &[VisionSourceSample]) {
+pub(crate) fn accumulate_visibility(
+    map: &mut FogOfWarMap,
+    sources: &[VisionSourceSample],
+    cell_sources: &[VisionCellSample],
+) {
     map.clear_visible_counts();
     let grid = map.grid();
+
+    for cell_source in cell_sources {
+        map.mark_visible(cell_source.layer, cell_source.cell);
+    }
 
     for source in sources {
         let Some(origin_cell) = grid.world_to_cell(source.position) else {

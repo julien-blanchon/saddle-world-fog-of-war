@@ -38,6 +38,13 @@ impl FogLayerMask {
     pub fn union(self, other: Self) -> Self {
         Self(self.0 | other.0)
     }
+
+    pub fn iter_layers(self) -> impl Iterator<Item = FogLayerId> {
+        (0..=FogLayerId::MAX_INDEX).filter_map(move |index| {
+            let layer = FogLayerId(index);
+            self.contains(layer).then_some(layer)
+        })
+    }
 }
 
 impl Default for FogLayerMask {

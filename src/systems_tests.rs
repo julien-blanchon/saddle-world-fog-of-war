@@ -172,3 +172,29 @@ fn stats_totals_include_steady_and_unchanged_layers() {
     assert_eq!(stats.explored_cells_total, expected_explored);
     assert_eq!(stats.source_count, 2);
 }
+
+#[test]
+fn shared_layers_reveal_allied_fog_layers() {
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins);
+    app.add_plugins(FogOfWarPlugin::default().with_config(test_config()));
+
+    app.world_mut().spawn((
+        Transform::from_xyz(2.5, 2.5, 0.0),
+        GlobalTransform::from_xyz(2.5, 2.5, 0.0),
+        crate::components::VisionSource::circle(FogLayerId(0), 2.5)
+            .with_shared_layers(crate::grid::FogLayerMask::bit(FogLayerId(1))),
+    ));
+
+    app.update();
+
+    let map = app.world().resource::<FogOfWarMap>();
+    assert_eq!(
+        map.visibility_at_cell(FogLayerId(0), IVec2::new(2, 2)),
+        Some(crate::grid::FogVisibilityState::Visible)
+    );
+    assert_eq!(
+        map.visibility_at_cell(FogLayerId(1), IVec2::new(2, 2)),
+        Some(crate::grid::FogVisibilityState::Visible)
+    );
+}

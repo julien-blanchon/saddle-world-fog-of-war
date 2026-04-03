@@ -73,7 +73,7 @@ For examples and crate-local labs, `FogOfWarPlugin::default()` is the always-on 
 - `FogOfWarConfig`, `FogGridSpec`, `FogOcclusionMode`, `FogWorldAxes`: top-level tuning surface for world-to-cell mapping and LOS mode.
 - `FogLayerId`, `FogLayerMask`, `FogVisibilityState`, `FogChunkCoord`: reusable grid and layer vocabulary.
 - `FogOfWarMap`: query surface for gameplay and tools. Use `visibility_at_world_pos`, `visibility_at_cell`, `is_visible`, `is_explored`, `iter_visible_cells`, and `iter_explored_cells`.
-- `VisionSource`, `VisionOccluder`, `FogRevealShape`, `FogOccluderShape`: ECS inputs for revealers and blockers.
+- `VisionSource`, `VisionCellSource`, `VisionOccluder`, `FogRevealShape`, `FogOccluderShape`: ECS inputs for revealers and blockers.
 - `FogOverlay2d`, `FogProjectionReceiver`, `FogPalette`: built-in presentation components for 2D and 3D consumers.
 - `VisibilityMapUpdated`: batched message emitted when one or more chunks change in a layer.
 - `FogOfWarStats`, `FogOfWarRenderAssets`: runtime diagnostics and generated `Image` handles per layer.
@@ -86,6 +86,8 @@ For examples and crate-local labs, `FogOfWarPlugin::default()` is the always-on 
 - `FogOcclusionMode::Bresenham` uses per-cell Bresenham LOS against blocker cells.
 - `FogWorldAxes::XY` maps `GlobalTransform.translation.xy()` onto the grid.
 - `FogWorldAxes::XZ` maps `translation.xz()` onto the grid for projected 3D ground planes.
+- `VisionSource::with_shared_layers(...)` lets one revealer feed allied or mirrored fog layers.
+- `VisionCellSource` lets other systems publish exact visible cells directly into the fog runtime without rasterizing a reveal shape.
 
 Full field-by-field guidance lives in [docs/configuration.md](docs/configuration.md).
 
@@ -98,6 +100,7 @@ Full field-by-field guidance lives in [docs/configuration.md](docs/configuration
 | `rts_large_map` | Larger shared-layer shroud with many revealers and minimap reuse | `cargo run -p saddle-world-fog-of-war-example-rts-large-map` |
 | `projected_3d` | Same CPU truth rendered on a 3D ground-plane receiver | `cargo run -p saddle-world-fog-of-war-example-projected-3d` |
 | `vision_cones` | Arc-based revealers proving the crate is not limited to circles | `cargo run -p saddle-world-fog-of-war-example-vision-cones` |
+| `fov_integration` | Cross-crate demo where `saddle-ai-fov` feeds exact visible cells into fog-of-war memory | `cargo run -p saddle-world-fog-of-war-example-fov-integration` |
 | `saddle-world-fog-of-war-lab` | Crate-local lab with BRP and E2E hooks | `cargo run -p saddle-world-fog-of-war-lab` |
 
 ## Crate-Local Lab

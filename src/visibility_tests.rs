@@ -29,21 +29,21 @@ fn hidden_visible_explored_visible_flow_is_stable() {
     };
 
     rebuild_blockers(&mut map, &[]);
-    accumulate_visibility(&mut map, &[source]);
+    accumulate_visibility(&mut map, &[source], &[]);
     commit_visibility(&mut map);
     assert_eq!(
         map.visibility_at_cell(FogLayerId(0), IVec2::new(2, 2)),
         Some(FogVisibilityState::Visible)
     );
 
-    accumulate_visibility(&mut map, &[]);
+    accumulate_visibility(&mut map, &[], &[]);
     commit_visibility(&mut map);
     assert_eq!(
         map.visibility_at_cell(FogLayerId(0), IVec2::new(2, 2)),
         Some(FogVisibilityState::Explored)
     );
 
-    accumulate_visibility(&mut map, &[source]);
+    accumulate_visibility(&mut map, &[source], &[]);
     commit_visibility(&mut map);
     assert_eq!(
         map.visibility_at_cell(FogLayerId(0), IVec2::new(2, 2)),
@@ -70,7 +70,7 @@ fn overlapping_sources_merge_without_leaking_layers() {
         shape: FogRevealShape::circle(1.5),
     };
 
-    accumulate_visibility(&mut map, &[primary, secondary, other_layer]);
+    accumulate_visibility(&mut map, &[primary, secondary, other_layer], &[]);
     commit_visibility(&mut map);
 
     assert!(map.is_visible(FogLayerId(0), IVec2::new(5, 4)));
@@ -87,7 +87,7 @@ fn arc_reveal_only_hits_forward_cells() {
         shape: FogRevealShape::arc(4.0, std::f32::consts::FRAC_PI_2, Vec2::X),
     };
 
-    accumulate_visibility(&mut map, &[source]);
+    accumulate_visibility(&mut map, &[source], &[]);
     commit_visibility(&mut map);
 
     assert!(map.is_visible(FogLayerId(0), IVec2::new(7, 4)));
@@ -109,9 +109,26 @@ fn blockers_stop_visibility_behind_walls() {
     };
 
     rebuild_blockers(&mut map, &[occluder]);
-    accumulate_visibility(&mut map, &[source]);
+    accumulate_visibility(&mut map, &[source], &[]);
     commit_visibility(&mut map);
 
     assert!(map.is_visible(FogLayerId(0), IVec2::new(5, 4)));
     assert!(!map.is_visible(FogLayerId(0), IVec2::new(8, 4)));
+}
+
+#[test]
+fn manual_cell_sources_reveal_cells_without_shape_rasterization() {
+    let mut map = test_map();
+
+    accumulate_visibility(
+        &mut map,
+        &[],
+        &[VisionCellSample {
+            layer: FogLayerId(0),
+            cell: IVec2::new(3, 7),
+        }],
+    );
+    commit_visibility(&mut map);
+
+    assert!(map.is_visible(FogLayerId(0), IVec2::new(3, 7)));
 }
