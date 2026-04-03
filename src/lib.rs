@@ -9,7 +9,7 @@ mod visibility;
 
 pub use components::{
     FogOccluderShape, FogOverlay2d, FogPalette, FogProjectionReceiver, FogRevealShape,
-    VisionOccluder, VisionSource,
+    VisionCellSource, VisionOccluder, VisionSource,
 };
 pub use grid::{FogChunkCoord, FogGridSpec, FogLayerId, FogLayerMask, FogVisibilityState};
 pub use messages::VisibilityMapUpdated;
@@ -100,6 +100,7 @@ impl Plugin for FogOfWarPlugin {
             .register_type::<FogRevealShape>()
             .register_type::<FogVisibilityState>()
             .register_type::<FogWorldAxes>()
+            .register_type::<VisionCellSource>()
             .register_type::<VisionOccluder>()
             .register_type::<VisionSource>()
             .configure_sets(

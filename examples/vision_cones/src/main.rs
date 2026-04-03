@@ -1,15 +1,50 @@
 use saddle_world_fog_of_war_example_support as support;
 
 use bevy::prelude::*;
-use saddle_world_fog_of_war::{FogLayerId, FogOfWarPlugin, VisionSource};
+use saddle_pane::prelude::*;
+use saddle_world_fog_of_war::{FogLayerId, FogOfWarMap, FogOfWarPlugin, FogOverlay2d, VisionSource};
 
 #[derive(Component)]
 struct Sensor;
+
+#[derive(Resource, Debug, Clone, Copy, Pane)]
+#[pane(title = "Vision Cones", position = "top-right")]
+struct ConePane {
+    #[pane]
+    pause_motion: bool,
+    #[pane(slider, min = 2.0, max = 8.0, step = 0.1)]
+    radius_cells: f32,
+    #[pane(slider, min = 0.2, max = 1.6, step = 0.02)]
+    spread_radians: f32,
+    #[pane(slider, min = 0.1, max = 1.2, step = 0.02)]
+    spin_speed: f32,
+    #[pane(slider, min = 0.0, max = 0.6, step = 0.01)]
+    edge_softness: f32,
+    #[pane(monitor)]
+    visible_cells: usize,
+    #[pane(monitor)]
+    explored_cells: usize,
+}
+
+impl Default for ConePane {
+    fn default() -> Self {
+        Self {
+            pause_motion: false,
+            radius_cells: 5.5,
+            spread_radians: 1.0,
+            spin_speed: 0.65,
+            edge_softness: 0.35,
+            visible_cells: 0,
+            explored_cells: 0,
+        }
+    }
+}
 
 fn main() {
     let config = support::config_2d(UVec2::new(26, 18));
 
     App::new()
+        .insert_resource(ConePane::default())
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "fog_of_war vision_cones".into(),
@@ -18,11 +53,27 @@ fn main() {
             }),
             ..default()
         }))
+        .add_plugins((
+            bevy_flair::FlairPlugin,
+            bevy_input_focus::InputDispatchPlugin,
+            bevy_ui_widgets::UiWidgetsPlugins,
+            bevy_input_focus::tab_navigation::TabNavigationPlugin,
+            PanePlugin,
+        ))
+        .register_pane::<ConePane>()
         .add_plugins(FogOfWarPlugin::default().with_config(config.clone()))
         .add_systems(Startup, move |mut commands: Commands| {
             setup(&mut commands, &config)
         })
+        .add_systems(
+            Update,
+            sync_controls.before(saddle_world_fog_of_war::FogOfWarSystems::CollectVisionSources),
+        )
         .add_systems(Update, spin_sensor)
+        .add_systems(
+            Update,
+            update_pane.after(saddle_world_fog_of_war::FogOfWarSystems::UpdateExplorationMemory),
+        )
         .run();
 }
 
@@ -66,10 +117,38 @@ fn setup(commands: &mut Commands, config: &saddle_world_fog_of_war::FogOfWarConf
     );
 }
 
-fn spin_sensor(time: Res<Time>, mut sensor: Query<&mut VisionSource, With<Sensor>>) {
+fn spin_sensor(
+    time: Res<Time>,
+    pane: Res<ConePane>,
+    mut sensor: Query<&mut VisionSource, With<Sensor>>,
+) {
     let Ok(mut source) = sensor.single_mut() else {
         return;
     };
-    let angle = time.elapsed_secs() * 0.65;
-    source.shape = support::moving_arc_shape(angle, 5.5, 1.0);
+    let angle = if pane.pause_motion {
+        0.0
+    } else {
+        time.elapsed_secs() * pane.spin_speed
+    };
+    source.shape = support::moving_arc_shape(angle, pane.radius_cells, pane.spread_radians);
+}
+
+fn sync_controls(
+    pane: Res<ConePane>,
+    mut overlay: Single<&mut FogOverlay2d>,
+) {
+    if !pane.is_changed() {
+        return;
+    }
+
+    overlay.edge_softness = pane.edge_softness;
+}
+
+fn update_pane(map: Res<FogOfWarMap>, mut pane: ResMut<ConePane>) {
+    let summary = map.layer_summary(FogLayerId(0)).unwrap_or(saddle_world_fog_of_war::FogLayerSummary {
+        visible_cells: 0,
+        explored_cells: 0,
+    });
+    pane.visible_cells = summary.visible_cells;
+    pane.explored_cells = summary.explored_cells;
 }

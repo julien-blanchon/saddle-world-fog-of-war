@@ -6,6 +6,7 @@ members = [
     "rts_large_map",
     "projected_3d",
     "vision_cones",
+    "fov_integration",
     "lab",
 ]
 resolver = "3"

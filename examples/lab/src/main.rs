@@ -8,6 +8,7 @@ use bevy::prelude::*;
 use bevy::remote::{RemotePlugin, http::RemoteHttpPlugin};
 #[cfg(feature = "dev")]
 use bevy_brp_extras::BrpExtrasPlugin;
+use saddle_pane::prelude::*;
 use saddle_world_fog_of_war::{
     FogLayerId, FogLayerSummary, FogOfWarConfig, FogOfWarMap, FogOfWarPlugin,
     FogProjectionReceiver, FogRevealShape, FogVisibilityState, FogWorldAxes, VisionOccluder,
@@ -17,7 +18,7 @@ use saddle_world_fog_of_war::{
 pub const MEMORY_SAMPLE_CELL: IVec2 = IVec2::new(4, 4);
 pub const OCCLUDED_SAMPLE_CELL: IVec2 = IVec2::new(14, 8);
 pub const TEAM_ZERO_SAMPLE_CELL: IVec2 = IVec2::new(4, 4);
-pub const TEAM_ONE_SAMPLE_CELL: IVec2 = IVec2::new(15, 6);
+pub const TEAM_ONE_SAMPLE_CELL: IVec2 = IVec2::new(17, 6);
 
 #[derive(Component)]
 pub struct LabCamera;
@@ -44,10 +45,29 @@ struct LabEntities {
     minimap_receiver: Entity,
 }
 
-#[derive(Resource, Clone, Copy)]
+#[derive(Resource, Clone, Copy, Pane)]
+#[pane(title = "Fog Lab Controls", position = "top-right")]
 pub struct LabControl {
+    #[pane]
     pub pause_motion: bool,
+    #[pane(skip)]
     pub selected_layer: FogLayerId,
+    #[pane(slider, min = 2.0, max = 7.5, step = 0.1)]
+    pub scout_alpha_radius: f32,
+    #[pane(slider, min = 2.0, max = 7.5, step = 0.1)]
+    pub scout_beta_radius: f32,
+    #[pane(slider, min = 2.0, max = 8.0, step = 0.1)]
+    pub sentry_radius: f32,
+    #[pane(slider, min = 0.4, max = 1.8, step = 0.02)]
+    pub sentry_spread: f32,
+    #[pane(slider, min = 0.12, max = 0.8, step = 0.02)]
+    pub scout_alpha_speed: f32,
+    #[pane(slider, min = 0.12, max = 0.8, step = 0.02)]
+    pub scout_beta_speed: f32,
+    #[pane(slider, min = 0.1, max = 0.6, step = 0.02)]
+    pub camera_orbit_speed: f32,
+    #[pane(slider, min = 0.0, max = 0.6, step = 0.01)]
+    pub main_edge_softness: f32,
 }
 
 impl Default for LabControl {
@@ -55,6 +75,14 @@ impl Default for LabControl {
         Self {
             pause_motion: false,
             selected_layer: FogLayerId(0),
+            scout_alpha_radius: 4.8,
+            scout_beta_radius: 4.0,
+            sentry_radius: 5.5,
+            sentry_spread: 1.2,
+            scout_alpha_speed: 0.55,
+            scout_beta_speed: 0.42,
+            camera_orbit_speed: 0.18,
+            main_edge_softness: 0.3,
         }
     }
 }
@@ -119,10 +147,19 @@ fn main() {
     app.add_plugins(e2e::FogOfWarLabE2EPlugin);
 
     app.add_plugins(FogOfWarPlugin::default().with_config(lab_config()));
+    app.add_plugins((
+        bevy_flair::FlairPlugin,
+        bevy_input_focus::InputDispatchPlugin,
+        bevy_ui_widgets::UiWidgetsPlugins,
+        bevy_input_focus::tab_navigation::TabNavigationPlugin,
+        PanePlugin,
+    ))
+        .register_pane::<LabControl>();
     app.add_systems(Startup, setup);
     app.add_systems(
         Update,
         (
+            sync_demo_controls.before(saddle_world_fog_of_war::FogOfWarSystems::CollectVisionSources),
             animate_scout_alpha,
             animate_scout_beta,
             animate_sentry,
@@ -350,7 +387,7 @@ fn animate_scout_alpha(
     let Ok(mut transform) = scout.single_mut() else {
         return;
     };
-    let phase = time.elapsed_secs() * 0.55;
+    let phase = time.elapsed_secs() * control.scout_alpha_speed;
     transform.translation.x = 4.5 + phase.sin() * 2.6;
     transform.translation.z = 4.5 + (phase * 1.2).cos() * 1.8;
 }
@@ -366,7 +403,7 @@ fn animate_scout_beta(
     let Ok(mut transform) = scout.single_mut() else {
         return;
     };
-    let phase = time.elapsed_secs() * 0.42;
+    let phase = time.elapsed_secs() * control.scout_beta_speed;
     transform.translation.x = 20.0 + phase.cos() * 2.4;
     transform.translation.z = 13.0 + phase.sin() * 2.0;
 }
@@ -382,14 +419,18 @@ fn animate_sentry(
     let Ok((transform, mut source)) = sentry.single_mut() else {
         return;
     };
-    let phase = time.elapsed_secs() * 0.6;
+    let phase = time.elapsed_secs() * control.camera_orbit_speed * 3.3333;
     source.shape = FogRevealShape::arc(
-        5.5,
-        1.2,
+        control.sentry_radius,
+        control.sentry_spread,
         Vec2::new(phase.cos(), phase.sin()).normalize_or_zero(),
     );
     if transform.translation.x < 0.0 {
-        source.shape = FogRevealShape::arc(5.5, 1.2, Vec2::new(-1.0, 0.0));
+        source.shape = FogRevealShape::arc(
+            control.sentry_radius,
+            control.sentry_spread,
+            Vec2::new(-1.0, 0.0),
+        );
     }
 }
 
@@ -405,13 +446,42 @@ fn orbit_camera(
         return;
     };
     let center = Vec3::new(12.0, 0.0, 9.0);
-    let angle = time.elapsed_secs() * 0.18;
+    let angle = time.elapsed_secs() * control.camera_orbit_speed;
     transform.translation = Vec3::new(
         center.x + angle.cos() * 13.0,
         16.0 + (angle * 1.8).sin() * 1.2,
         center.z + angle.sin() * 9.5,
     );
     transform.look_at(center, Vec3::Y);
+}
+
+fn sync_demo_controls(
+    control: Res<LabControl>,
+    entities: Res<LabEntities>,
+    mut sources: Query<&mut VisionSource>,
+    mut receivers: Query<&mut FogProjectionReceiver>,
+) {
+    if !control.is_changed() {
+        return;
+    }
+
+    if let Ok(mut source) = sources.get_mut(entities.scout_alpha) {
+        source.shape = FogRevealShape::circle(control.scout_alpha_radius);
+    }
+    if let Ok(mut source) = sources.get_mut(entities.scout_beta) {
+        source.shape = FogRevealShape::circle(control.scout_beta_radius);
+    }
+    if let Ok(mut source) = sources.get_mut(entities.sentry) {
+        let facing = match source.shape {
+            FogRevealShape::Arc { facing, .. } => facing,
+            _ => Vec2::new(-1.0, 0.0),
+        };
+        source.shape = FogRevealShape::arc(control.sentry_radius, control.sentry_spread, facing);
+    }
+
+    if let Ok(mut receiver) = receivers.get_mut(entities.main_receiver) {
+        receiver.edge_softness = control.main_edge_softness;
+    }
 }
 
 fn sync_receivers(

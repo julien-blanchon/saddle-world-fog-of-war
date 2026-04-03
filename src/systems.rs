@@ -3,10 +3,10 @@ use std::time::Instant;
 use bevy::prelude::*;
 
 use crate::{
-    components::{VisionOccluder, VisionSource},
+    components::{VisionCellSource, VisionOccluder, VisionSource},
     messages::VisibilityMapUpdated,
     resources::{FogOfWarConfig, FogOfWarMap, FogOfWarStats, FogWorldAxes},
-    visibility::{self, VisionOccluderSample, VisionSourceSample},
+    visibility::{self, VisionCellSample, VisionOccluderSample, VisionSourceSample},
 };
 
 #[derive(Resource, Default)]
@@ -18,6 +18,7 @@ pub(crate) struct FogRuntimeState {
 #[derive(Resource, Default)]
 pub(crate) struct FogCollectedInputs {
     pub sources: Vec<VisionSourceSample>,
+    pub cell_sources: Vec<VisionCellSample>,
     pub occluders: Vec<VisionOccluderSample>,
 }
 
@@ -52,28 +53,49 @@ pub(crate) fn collect_inputs(
     mut stats: ResMut<FogOfWarStats>,
     mut collected: ResMut<FogCollectedInputs>,
     sources: Query<(&GlobalTransform, &VisionSource)>,
+    cell_sources: Query<&VisionCellSource>,
     occluders: Query<(&GlobalTransform, &VisionOccluder)>,
 ) {
     map.reconfigure(config.clone());
 
     collected.sources.clear();
+    collected.cell_sources.clear();
     collected.occluders.clear();
+    let mut enabled_sources = 0;
+    let mut enabled_cell_sources = 0;
+    let mut enabled_occluders = 0;
 
     for (transform, source) in &sources {
         if !source.enabled {
             continue;
         }
-        collected.sources.push(VisionSourceSample {
-            layer: source.layer,
-            position: projected_position(transform, &config) + source.offset,
-            shape: source.shape,
-        });
+        enabled_sources += 1;
+        for layer in source.resolved_layers().iter_layers() {
+            collected.sources.push(VisionSourceSample {
+                layer,
+                position: projected_position(transform, &config) + source.offset,
+                shape: source.shape,
+            });
+        }
+    }
+
+    for cell_source in &cell_sources {
+        if !cell_source.enabled {
+            continue;
+        }
+        enabled_cell_sources += 1;
+        for layer in cell_source.layers.iter_layers() {
+            for cell in &cell_source.cells {
+                collected.cell_sources.push(VisionCellSample { layer, cell: *cell });
+            }
+        }
     }
 
     for (transform, occluder) in &occluders {
         if !occluder.enabled {
             continue;
         }
+        enabled_occluders += 1;
         collected.occluders.push(VisionOccluderSample {
             layers: occluder.layers,
             position: projected_position(transform, &config) + occluder.offset,
@@ -81,8 +103,8 @@ pub(crate) fn collect_inputs(
         });
     }
 
-    stats.source_count = collected.sources.len();
-    stats.occluder_count = collected.occluders.len();
+    stats.source_count = enabled_sources + enabled_cell_sources;
+    stats.occluder_count = enabled_occluders;
 }
 
 pub(crate) fn compute_visibility(
@@ -92,7 +114,7 @@ pub(crate) fn compute_visibility(
 ) {
     let start = Instant::now();
     visibility::rebuild_blockers(&mut map, &collected.occluders);
-    visibility::accumulate_visibility(&mut map, &collected.sources);
+    visibility::accumulate_visibility(&mut map, &collected.sources, &collected.cell_sources);
     runtime.last_raster_micros = start.elapsed().as_micros() as u64;
 }
 

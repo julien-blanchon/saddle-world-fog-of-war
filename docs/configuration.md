@@ -31,9 +31,18 @@ This document covers the main public tuning surfaces. Defaults describe the buil
 | Field | Type | Default | Valid range | Perf impact | Gameplay effect | Rendering effect |
 | --- | --- | --- | --- | --- | --- | --- |
 | `layer` | `FogLayerId` | constructor-provided | `0..=63` | active layers increase storage | decides which layer becomes visible | determines which receiver texture updates |
+| `shared_layers` | `FogLayerMask` | `EMPTY` | any layer bitset | negligible | mirrors the same reveal footprint into additional layers | lets one revealer drive multiple layer textures |
 | `shape` | `FogRevealShape` | constructor-provided | see shape table below | larger shapes touch more candidate cells | controls reveal footprint | controls fog holes and silhouette size |
 | `offset` | `Vec2` | `Vec2::ZERO` | any finite value | negligible | lets the reveal origin sit away from the entity pivot | keeps projected visuals centered on the intended reveal point |
 | `enabled` | `bool` | `true` | `true` or `false` | disabled sources are skipped entirely | turns a revealer on or off without despawning | removes or restores the hole in the overlay |
+
+## `VisionCellSource`
+
+| Field | Type | Default | Valid range | Perf impact | Gameplay effect | Rendering effect |
+| --- | --- | --- | --- | --- | --- | --- |
+| `layers` | `FogLayerMask` | constructor-provided | any layer bitset | scales with number of cells published and target layers touched | injects exact visible cells without using a geometric reveal shape | updates the same layer textures as shape-based revealers |
+| `cells` | `Vec<IVec2>` | empty | in-bounds grid cells | proportional to the number of cells copied each update | ideal for bridge systems such as FOV, tactical sensors, or server-authoritative vision | reveals exactly the supplied cells, preserving upstream visibility semantics |
+| `enabled` | `bool` | `true` | `true` or `false` | disabled sources are skipped entirely | turns exact-cell reveal on or off without despawning | removes or restores those revealed cells from presentation |
 
 ## `FogRevealShape`
 
@@ -48,6 +57,7 @@ Guidance:
 - keep radii and half extents positive
 - normalize `facing` when you care about exact cone direction
 - use arcs when you need directional stealth or watchtower logic without adding a custom shape type
+- use `shared_layers` when the same revealer should update allied team vision or a mirrored minimap layer
 
 ## `VisionOccluder`
 

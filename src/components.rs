@@ -43,6 +43,7 @@ impl FogRevealShape {
 #[reflect(Component)]
 pub struct VisionSource {
     pub layer: FogLayerId,
+    pub shared_layers: FogLayerMask,
     pub shape: FogRevealShape,
     pub offset: Vec2,
     pub enabled: bool,
@@ -52,6 +53,7 @@ impl VisionSource {
     pub fn new(layer: FogLayerId, shape: FogRevealShape) -> Self {
         Self {
             layer,
+            shared_layers: FogLayerMask::EMPTY,
             shape,
             offset: Vec2::ZERO,
             enabled: true,
@@ -73,6 +75,15 @@ impl VisionSource {
     pub fn with_offset(mut self, offset: Vec2) -> Self {
         self.offset = offset;
         self
+    }
+
+    pub fn with_shared_layers(mut self, shared_layers: FogLayerMask) -> Self {
+        self.shared_layers = shared_layers;
+        self
+    }
+
+    pub fn resolved_layers(self) -> FogLayerMask {
+        FogLayerMask::bit(self.layer).union(self.shared_layers)
     }
 }
 
@@ -129,6 +140,29 @@ impl VisionOccluder {
 
     pub fn with_offset(mut self, offset: Vec2) -> Self {
         self.offset = offset;
+        self
+    }
+}
+
+#[derive(Component, Debug, Clone, PartialEq, Reflect)]
+#[reflect(Component)]
+pub struct VisionCellSource {
+    pub layers: FogLayerMask,
+    pub cells: Vec<IVec2>,
+    pub enabled: bool,
+}
+
+impl VisionCellSource {
+    pub fn new(layers: FogLayerMask) -> Self {
+        Self {
+            layers,
+            cells: Vec::new(),
+            enabled: true,
+        }
+    }
+
+    pub fn with_cells(mut self, cells: Vec<IVec2>) -> Self {
+        self.cells = cells;
         self
     }
 }

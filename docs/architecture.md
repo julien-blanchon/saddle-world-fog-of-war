@@ -23,10 +23,10 @@ The core layer owns correctness. The ECS layer only gathers world inputs, update
 ## Runtime Flow
 
 ```text
-VisionSource / VisionOccluder components
+VisionSource / VisionCellSource / VisionOccluder components
   -> collect_inputs
   -> rebuild blocker grid
-  -> rasterize reveal shapes
+  -> rasterize reveal shapes or apply exact visible cells
   -> apply LOS per candidate cell
   -> commit Visible / Explored / Hidden states
   -> emit VisibilityMapUpdated messages
@@ -48,6 +48,7 @@ That guarantees:
 - world transforms and source components are sampled before visibility is computed
 - `FogOfWarMap` is stable before messages are emitted
 - render assets only observe committed state, never half-updated intermediate buffers
+- cross-crate bridge systems can safely run after another visibility system and before `CollectVisionSources`
 
 The plugin accepts injectable activate, deactivate, and update schedules so consumers can map the runtime into their own state machine.
 
@@ -58,6 +59,7 @@ The plugin accepts injectable activate, deactivate, and update schedules so cons
 What v1 does:
 
 - rasterizes each reveal shape into a candidate cell rectangle
+- can also accept exact visible cells through `VisionCellSource`
 - filters candidates by shape containment
 - runs Bresenham LOS from the source cell to each candidate cell when occlusion is enabled
 - merges overlapping revealers by incrementing per-cell visible counts
@@ -97,6 +99,7 @@ Chunking is used for change reporting and integration, not for storage eviction.
 
 - `FogLayerId(pub u8)` selects the logical visibility layer.
 - `FogLayerMask(pub u64)` lets blockers affect one layer or many layers at once.
+- `VisionSource::shared_layers` duplicates one revealer into additional layers without spawning duplicate entities.
 - valid layer indices are `0..=63` because the mask backend is a `u64`.
 
 This keeps the API generic. One game can treat layers as factions, another as sensor networks, and another as floor-specific viewers.

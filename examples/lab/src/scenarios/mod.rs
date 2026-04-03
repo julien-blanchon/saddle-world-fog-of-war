@@ -82,6 +82,7 @@ fn fog_of_war_smoke() -> Scenario {
 fn fog_of_war_exploration_memory() -> Scenario {
     Scenario::builder("fog_of_war_exploration_memory")
         .description("Move the primary scout across the arena and verify old cells degrade to explored instead of returning to hidden.")
+        .then(Action::WaitFrames(2))
         .then(pause_motion(true))
         .then(set_layer(FogLayerId(0)))
         .then(move_beta(Vec2::new(21.0, 14.0)))
@@ -118,6 +119,7 @@ fn fog_of_war_exploration_memory() -> Scenario {
 fn fog_of_war_occlusion() -> Scenario {
     Scenario::builder("fog_of_war_occlusion")
         .description("Pin the scout against the central wall and assert that blocked cells remain hidden behind the occluder.")
+        .then(Action::WaitFrames(2))
         .then(pause_motion(true))
         .then(set_layer(FogLayerId(0)))
         .then(move_beta(Vec2::new(22.0, 15.0)))
@@ -144,6 +146,7 @@ fn fog_of_war_occlusion() -> Scenario {
 fn fog_of_war_team_layers() -> Scenario {
     Scenario::builder("fog_of_war_team_layers")
         .description("Switch the presentation between team layers and verify the selected receiver layer and visible samples change with it.")
+        .then(Action::WaitFrames(2))
         .then(pause_motion(true))
         .then(move_alpha(Vec2::new(4.5, 4.5)))
         .then(move_beta(Vec2::new(20.5, 13.0)))

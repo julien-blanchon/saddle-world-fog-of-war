@@ -1,5 +1,5 @@
 [package]
-name = "saddle-world-fog-of-war-example-occlusion-2d"
+name = "saddle-world-fog-of-war-example-fov-integration"
 version = "0.1.0"
 edition = "2024"
 publish = false
@@ -8,6 +8,7 @@ publish = false
 bevy = { workspace = true }
 saddle-world-fog-of-war = { workspace = true }
 saddle-world-fog-of-war-example-support = { path = "../support" }
+saddle-ai-fov = { git = "https://github.com/julien-blanchon/saddle-ai-fov" }
 bevy_flair = "0.7"
 bevy_input_focus = "0.18"
 bevy_ui_widgets = "0.18"

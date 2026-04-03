@@ -1,15 +1,49 @@
 use saddle_world_fog_of_war_example_support as support;
 
 use bevy::prelude::*;
-use saddle_world_fog_of_war::{FogLayerId, FogOfWarPlugin, VisionSource};
+use saddle_pane::prelude::*;
+use saddle_world_fog_of_war::{
+    FogLayerId, FogOfWarMap, FogOfWarPlugin, FogOverlay2d, FogRevealShape, VisionSource,
+};
 
 #[derive(Component)]
 struct Observer;
+
+#[derive(Resource, Debug, Clone, Copy, Pane)]
+#[pane(title = "Occlusion 2D", position = "top-right")]
+struct OcclusionPane {
+    #[pane]
+    pause_motion: bool,
+    #[pane(slider, min = 2.0, max = 8.0, step = 0.1)]
+    observer_radius_cells: f32,
+    #[pane(slider, min = 0.1, max = 1.4, step = 0.02)]
+    observer_speed: f32,
+    #[pane(slider, min = 0.0, max = 0.6, step = 0.01)]
+    edge_softness: f32,
+    #[pane(monitor)]
+    visible_cells: usize,
+    #[pane(monitor)]
+    explored_cells: usize,
+}
+
+impl Default for OcclusionPane {
+    fn default() -> Self {
+        Self {
+            pause_motion: false,
+            observer_radius_cells: 4.2,
+            observer_speed: 0.7,
+            edge_softness: 0.35,
+            visible_cells: 0,
+            explored_cells: 0,
+        }
+    }
+}
 
 fn main() {
     let config = support::config_2d(UVec2::new(24, 18));
 
     App::new()
+        .insert_resource(OcclusionPane::default())
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "fog_of_war occlusion_2d".into(),
@@ -18,11 +52,27 @@ fn main() {
             }),
             ..default()
         }))
+        .add_plugins((
+            bevy_flair::FlairPlugin,
+            bevy_input_focus::InputDispatchPlugin,
+            bevy_ui_widgets::UiWidgetsPlugins,
+            bevy_input_focus::tab_navigation::TabNavigationPlugin,
+            PanePlugin,
+        ))
+        .register_pane::<OcclusionPane>()
         .add_plugins(FogOfWarPlugin::default().with_config(config.clone()))
         .add_systems(Startup, move |mut commands: Commands| {
             setup(&mut commands, &config)
         })
+        .add_systems(
+            Update,
+            sync_controls.before(saddle_world_fog_of_war::FogOfWarSystems::CollectVisionSources),
+        )
         .add_systems(Update, sweep_observer)
+        .add_systems(
+            Update,
+            update_pane.after(saddle_world_fog_of_war::FogOfWarSystems::UpdateExplorationMemory),
+        )
         .run();
 }
 
@@ -74,11 +124,40 @@ fn setup(commands: &mut Commands, config: &saddle_world_fog_of_war::FogOfWarConf
     );
 }
 
-fn sweep_observer(time: Res<Time>, mut observer: Query<&mut Transform, With<Observer>>) {
+fn sweep_observer(
+    time: Res<Time>,
+    pane: Res<OcclusionPane>,
+    mut observer: Query<&mut Transform, With<Observer>>,
+) {
+    if pane.pause_motion {
+        return;
+    }
     let Ok(mut transform) = observer.single_mut() else {
         return;
     };
-    let phase = time.elapsed_secs() * 0.7;
+    let phase = time.elapsed_secs() * pane.observer_speed;
     transform.translation.x = 180.0 + phase.sin() * 40.0;
     transform.translation.y = 288.0 + (phase * 1.6).sin() * 160.0;
+}
+
+fn sync_controls(
+    pane: Res<OcclusionPane>,
+    mut observer: Single<&mut VisionSource, With<Observer>>,
+    mut overlay: Single<&mut FogOverlay2d>,
+) {
+    if !pane.is_changed() {
+        return;
+    }
+
+    observer.shape = FogRevealShape::circle(pane.observer_radius_cells * support::CELL_SIZE_2D);
+    overlay.edge_softness = pane.edge_softness;
+}
+
+fn update_pane(map: Res<FogOfWarMap>, mut pane: ResMut<OcclusionPane>) {
+    let summary = map.layer_summary(FogLayerId(0)).unwrap_or(saddle_world_fog_of_war::FogLayerSummary {
+        visible_cells: 0,
+        explored_cells: 0,
+    });
+    pane.visible_cells = summary.visible_cells;
+    pane.explored_cells = summary.explored_cells;
 }
