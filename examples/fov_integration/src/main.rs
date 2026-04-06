@@ -4,7 +4,8 @@ use bevy::prelude::*;
 use saddle_ai_fov::{FovPlugin, GridFov, GridFovState, GridMapSpec, GridOpacityMap};
 use saddle_pane::prelude::*;
 use saddle_world_fog_of_war::{
-    FogLayerId, FogLayerMask, FogOfWarPlugin, FogOverlay2d, VisionCellSource, VisionOccluder,
+    FogLayerId, FogLayerMask, FogOfWarPlugin, FogOfWarRenderingPlugin, FogOverlay2d,
+    VisionCellSource, VisionOccluder,
 };
 use saddle_world_fog_of_war_example_support as support;
 
@@ -99,7 +100,10 @@ fn main() {
         ))
         .register_pane::<IntegrationPane>()
         .add_plugins(FovPlugin::default())
-        .add_plugins(FogOfWarPlugin::default().with_config(fog_config.clone()))
+        .add_plugins((
+            FogOfWarPlugin::default().with_config(fog_config.clone()),
+            FogOfWarRenderingPlugin::default(),
+        ))
         .configure_sets(
             Update,
             saddle_ai_fov::FovSystems::Recompute
@@ -128,7 +132,7 @@ fn main() {
         )
         .add_systems(
             Update,
-            update_monitors.after(saddle_world_fog_of_war::FogOfWarSystems::UpdateExplorationMemory),
+            update_monitors.after(saddle_world_fog_of_war::FogOfWarSystems::ApplyPersistence),
         )
         .run();
 }
@@ -197,23 +201,11 @@ fn setup(commands: &mut Commands, fog_config: &saddle_world_fog_of_war::FogOfWar
         },
     ));
 
-    commands.spawn((
-        Name::new("Example Label"),
-        Text::new(
-            "fov_integration: tactical grid FOV feeds exact visible cells into fog-of-war memory",
-        ),
-        Node {
-            position_type: PositionType::Absolute,
-            left: px(18.0),
-            top: px(16.0),
-            ..default()
-        },
-        TextFont {
-            font_size: 18.0,
-            ..default()
-        },
-        TextColor(Color::WHITE),
-    ));
+    support::spawn_instructions(
+        commands,
+        "FOV Integration",
+        "Use the pane in the top-right to pause the recon route, adjust the grid-FOV radius and speed, and soften the fog edge.\nThis scene uses saddle-ai-fov for the exact visible cells, then feeds those cells into fog-of-war memory.",
+    );
 }
 
 fn spawn_level_tiles(commands: &mut Commands, grid: &GridOpacityMap) {

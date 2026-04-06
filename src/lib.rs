@@ -2,6 +2,7 @@ mod components;
 mod grid;
 mod math;
 mod messages;
+mod persistence;
 mod rendering;
 mod resources;
 mod systems;
@@ -13,6 +14,9 @@ pub use components::{
 };
 pub use grid::{FogChunkCoord, FogGridSpec, FogLayerId, FogLayerMask, FogVisibilityState};
 pub use messages::VisibilityMapUpdated;
+pub use persistence::{
+    FogCustomPersistence, FogPersistenceCell, FogPersistenceMode, FogPersistencePolicy,
+};
 pub use resources::{
     FogLayerSummary, FogOcclusionMode, FogOfWarConfig, FogOfWarMap, FogOfWarRenderAssets,
     FogOfWarStats, FogWorldAxes,
@@ -28,7 +32,7 @@ use bevy::{
 pub enum FogOfWarSystems {
     CollectVisionSources,
     ComputeVisibility,
-    UpdateExplorationMemory,
+    ApplyPersistence,
     UploadRenderData,
 }
 
@@ -40,6 +44,7 @@ pub struct FogOfWarPlugin {
     pub deactivate_schedule: Interned<dyn ScheduleLabel>,
     pub update_schedule: Interned<dyn ScheduleLabel>,
     pub config: FogOfWarConfig,
+    custom_persistence: Option<FogCustomPersistence>,
 }
 
 impl FogOfWarPlugin {
@@ -53,6 +58,7 @@ impl FogOfWarPlugin {
             deactivate_schedule: deactivate_schedule.intern(),
             update_schedule: update_schedule.intern(),
             config: FogOfWarConfig::default(),
+            custom_persistence: None,
         }
     }
 
@@ -64,6 +70,23 @@ impl FogOfWarPlugin {
         self.config = config;
         self
     }
+
+    pub fn with_custom_persistence(mut self, policy: impl FogPersistencePolicy) -> Self {
+        self.custom_persistence = Some(FogCustomPersistence::new(policy));
+        self
+    }
+}
+
+pub struct FogOfWarRenderingPlugin {
+    pub update_schedule: Interned<dyn ScheduleLabel>,
+}
+
+impl FogOfWarRenderingPlugin {
+    pub fn new(update_schedule: impl ScheduleLabel) -> Self {
+        Self {
+            update_schedule: update_schedule.intern(),
+        }
+    }
 }
 
 impl Default for FogOfWarPlugin {
@@ -72,16 +95,35 @@ impl Default for FogOfWarPlugin {
     }
 }
 
+impl Default for FogOfWarRenderingPlugin {
+    fn default() -> Self {
+        Self::new(Update)
+    }
+}
+
 impl Plugin for FogOfWarPlugin {
     fn build(&self, app: &mut App) {
+        let has_preinserted_custom = app.world().contains_resource::<FogCustomPersistence>();
+        let mut config = self.config.clone();
+        if self.custom_persistence.is_some() || has_preinserted_custom {
+            config.persistence_mode = FogPersistenceMode::Custom;
+        } else if config.persistence_mode == FogPersistenceMode::Custom {
+            panic!(
+                "FogPersistenceMode::Custom requires FogOfWarPlugin::with_custom_persistence(...) or a pre-inserted FogCustomPersistence resource"
+            );
+        }
+
+        if let Some(custom_persistence) = &self.custom_persistence {
+            app.insert_resource(custom_persistence.clone());
+        }
+
         if self.deactivate_schedule == NeverDeactivateSchedule.intern() {
             app.init_schedule(NeverDeactivateSchedule);
         }
 
-        app.insert_resource(self.config.clone())
-            .insert_resource(FogOfWarMap::new(self.config.clone()))
+        app.insert_resource(config.clone())
+            .insert_resource(FogOfWarMap::new(config))
             .init_resource::<FogOfWarStats>()
-            .init_resource::<FogOfWarRenderAssets>()
             .init_resource::<systems::FogCollectedInputs>()
             .init_resource::<systems::FogRuntimeState>()
             .add_message::<VisibilityMapUpdated>()
@@ -93,6 +135,7 @@ impl Plugin for FogOfWarPlugin {
             .register_type::<FogOccluderShape>()
             .register_type::<FogOcclusionMode>()
             .register_type::<FogOfWarConfig>()
+            .register_type::<FogPersistenceMode>()
             .register_type::<FogOfWarStats>()
             .register_type::<FogOverlay2d>()
             .register_type::<FogPalette>()
@@ -108,7 +151,7 @@ impl Plugin for FogOfWarPlugin {
                 (
                     FogOfWarSystems::CollectVisionSources,
                     FogOfWarSystems::ComputeVisibility,
-                    FogOfWarSystems::UpdateExplorationMemory,
+                    FogOfWarSystems::ApplyPersistence,
                     FogOfWarSystems::UploadRenderData,
                 )
                     .chain(),
@@ -129,11 +172,15 @@ impl Plugin for FogOfWarPlugin {
             )
             .add_systems(
                 self.update_schedule,
-                systems::update_exploration_memory
-                    .in_set(FogOfWarSystems::UpdateExplorationMemory)
+                systems::apply_persistence
+                    .in_set(FogOfWarSystems::ApplyPersistence)
                     .run_if(systems::runtime_is_active),
             );
+    }
+}
 
+impl Plugin for FogOfWarRenderingPlugin {
+    fn build(&self, app: &mut App) {
         rendering::plugin(app, self.update_schedule);
     }
 }

@@ -3,7 +3,8 @@ use saddle_world_fog_of_war_example_support as support;
 use bevy::prelude::*;
 use saddle_pane::prelude::*;
 use saddle_world_fog_of_war::{
-    FogLayerId, FogOfWarMap, FogOfWarPlugin, FogProjectionReceiver, FogRevealShape, VisionSource,
+    FogLayerId, FogOfWarMap, FogOfWarPlugin, FogOfWarRenderingPlugin, FogProjectionReceiver,
+    FogRevealShape, VisionSource,
 };
 
 #[derive(Component)]
@@ -66,7 +67,10 @@ fn main() {
             PanePlugin,
         ))
         .register_pane::<ProjectedPane>()
-        .add_plugins(FogOfWarPlugin::default().with_config(config.clone()))
+        .add_plugins((
+            FogOfWarPlugin::default().with_config(config.clone()),
+            FogOfWarRenderingPlugin::default(),
+        ))
         .add_systems(
             Startup,
             move |mut commands: Commands,
@@ -82,7 +86,7 @@ fn main() {
         .add_systems(Update, (move_projection_scout, orbit_camera))
         .add_systems(
             Update,
-            update_pane.after(saddle_world_fog_of_war::FogOfWarSystems::UpdateExplorationMemory),
+            update_pane.after(saddle_world_fog_of_war::FogOfWarSystems::ApplyPersistence),
         )
         .run();
 }
@@ -135,6 +139,11 @@ fn setup(
         config.grid.origin,
         config.grid.world_size(),
         support::layer_palette(0.94, 0.70),
+    );
+    support::spawn_instructions(
+        commands,
+        "Projected Fog 3D",
+        "Use the pane in the top-right to pause the scene, tune the scout radius, adjust scout and camera speed, and soften the projection edge.\nThis example keeps the same CPU fog truth but renders it as a projected 3D receiver.",
     );
 }
 

@@ -1,16 +1,16 @@
 # Saddle World Fog of War
 
-Reusable fog-of-war and visibility runtime for Bevy. The crate keeps gameplay truth on a CPU grid, tracks `Hidden` / `Explored` / `Visible` state per layer, and exposes shader-friendly presentation surfaces for both 2D overlays and 3D ground-plane projection.
+Reusable fog-of-war and visibility runtime for Bevy. The crate keeps gameplay truth on a CPU grid, computes current visibility with configurable LOS, and then applies a pluggable persistence policy per layer. Built-in policies cover both `NoMemory` and `ExploredMemory`, while custom policies can override the commit semantics without forking the grid or LOS core.
 
-It stays project-agnostic: no `game_core`, no screen vocabulary, no lore-specific team types, and no dependency on a specific map renderer. Consumers use the map resource for gameplay truth and opt into the built-in overlay components when they want a ready-made presentation path.
+Rendering is intentionally optional. `FogOfWarPlugin` owns the CPU truth and persistence step, while `FogOfWarRenderingPlugin` turns the committed state surface into shader-friendly textures for 2D overlays or 3D ground-plane projection.
 
 ## Quick Start
 
 ```rust,no_run
 use bevy::prelude::*;
 use saddle_world_fog_of_war::{
-    FogGridSpec, FogLayerId, FogOfWarConfig, FogOfWarMap, FogOfWarPlugin, FogOverlay2d,
-    VisionSource,
+    FogGridSpec, FogLayerId, FogOfWarConfig, FogOfWarMap, FogOfWarPlugin,
+    FogOfWarRenderingPlugin, FogOverlay2d, VisionSource,
 };
 
 #[derive(States, Default, Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -33,11 +33,15 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .init_state::<DemoState>()
-        .add_plugins(FogOfWarPlugin::new(
-            OnEnter(DemoState::Gameplay),
-            OnExit(DemoState::Gameplay),
-            Update,
-        ).with_config(config.clone()))
+        .add_plugins((
+            FogOfWarPlugin::new(
+                OnEnter(DemoState::Gameplay),
+                OnExit(DemoState::Gameplay),
+                Update,
+            )
+            .with_config(config.clone()),
+            FogOfWarRenderingPlugin::default(),
+        ))
         .add_systems(Startup, move |mut commands: Commands| {
             commands.spawn((
                 Name::new("Observer Camera"),
@@ -64,19 +68,21 @@ fn inspect_visibility(map: Res<FogOfWarMap>) {
 }
 ```
 
-For examples and crate-local labs, `FogOfWarPlugin::default()` is the always-on entrypoint. It activates on `PostStartup`, never deactivates, and updates in `Update`.
+For examples and crate-local labs, `FogOfWarPlugin::default()` is the always-on core runtime entrypoint. It activates on `PostStartup`, never deactivates, and updates in `Update`. Add `FogOfWarRenderingPlugin::default()` when you want the built-in overlay/projection materials and per-layer `Image` output.
 
 ## Public API
 
-- `FogOfWarPlugin`: shared-crate plugin with injectable activate, deactivate, and update schedules.
-- `FogOfWarSystems`: public ordering hooks for `CollectVisionSources`, `ComputeVisibility`, `UpdateExplorationMemory`, and `UploadRenderData`.
-- `FogOfWarConfig`, `FogGridSpec`, `FogOcclusionMode`, `FogWorldAxes`: top-level tuning surface for world-to-cell mapping and LOS mode.
+- `FogOfWarPlugin`: shared-crate core plugin with injectable activate, deactivate, and update schedules.
+- `FogOfWarRenderingPlugin`: optional material/upload plugin for `FogOverlay2d`, `FogProjectionReceiver`, and `FogOfWarRenderAssets`.
+- `FogOfWarSystems`: public ordering hooks for `CollectVisionSources`, `ComputeVisibility`, `ApplyPersistence`, and `UploadRenderData`.
+- `FogOfWarConfig`, `FogGridSpec`, `FogOcclusionMode`, `FogWorldAxes`, `FogPersistenceMode`: top-level tuning surface for world-to-cell mapping, LOS mode, and persistence behavior.
 - `FogLayerId`, `FogLayerMask`, `FogVisibilityState`, `FogChunkCoord`: reusable grid and layer vocabulary.
-- `FogOfWarMap`: query surface for gameplay and tools. Use `visibility_at_world_pos`, `visibility_at_cell`, `is_visible`, `is_explored`, `iter_visible_cells`, and `iter_explored_cells`.
+- `FogPersistencePolicy`, `FogPersistenceCell`, `FogCustomPersistence`: custom persistence hook for consumers that need non-default commit behavior.
+- `FogOfWarMap`: query surface for gameplay and tools. Use `current_visibility_at_cell` / `is_visible` for current truth, and `visibility_at_world_pos` / `visibility_at_cell` / `iter_explored_cells` for the committed persistence surface.
 - `VisionSource`, `VisionCellSource`, `VisionOccluder`, `FogRevealShape`, `FogOccluderShape`: ECS inputs for revealers and blockers.
-- `FogOverlay2d`, `FogProjectionReceiver`, `FogPalette`: built-in presentation components for 2D and 3D consumers.
-- `VisibilityMapUpdated`: batched message emitted when one or more chunks change in a layer.
-- `FogOfWarStats`, `FogOfWarRenderAssets`: runtime diagnostics and generated `Image` handles per layer.
+- `FogOverlay2d`, `FogProjectionReceiver`, `FogPalette`: built-in presentation components for 2D and 3D consumers when the rendering plugin is enabled.
+- `VisibilityMapUpdated`: batched message emitted when one or more chunks change in a layer's current-visibility or committed-state surface.
+- `FogOfWarStats`, `FogOfWarRenderAssets`: runtime diagnostics and generated `Image` handles per layer. `FogOfWarRenderAssets` is only populated by the rendering plugin.
 
 ## Configuration Summary
 
@@ -86,6 +92,9 @@ For examples and crate-local labs, `FogOfWarPlugin::default()` is the always-on 
 - `FogOcclusionMode::Bresenham` uses per-cell Bresenham LOS against blocker cells.
 - `FogWorldAxes::XY` maps `GlobalTransform.translation.xy()` onto the grid.
 - `FogWorldAxes::XZ` maps `translation.xz()` onto the grid for projected 3D ground planes.
+- `FogPersistenceMode::NoMemory` clears committed state when vision leaves.
+- `FogPersistenceMode::ExploredMemory` keeps the classic `Visible -> Explored -> Hidden never` behavior.
+- `FogPersistenceMode::Custom` delegates the commit step to `FogCustomPersistence`.
 - `VisionSource::with_shared_layers(...)` lets one revealer feed allied or mirrored fog layers.
 - `VisionCellSource` lets other systems publish exact visible cells directly into the fog runtime without rasterizing a reveal shape.
 
@@ -116,6 +125,7 @@ E2E verification commands:
 ```bash
 cargo run -p saddle-world-fog-of-war-lab --features e2e -- fog_of_war_smoke
 cargo run -p saddle-world-fog-of-war-lab --features e2e -- fog_of_war_exploration_memory
+cargo run -p saddle-world-fog-of-war-lab --features e2e -- fog_of_war_no_memory
 cargo run -p saddle-world-fog-of-war-lab --features e2e -- fog_of_war_occlusion
 cargo run -p saddle-world-fog-of-war-lab --features e2e -- fog_of_war_team_layers
 cargo run -p saddle-world-fog-of-war-lab --features e2e -- fog_of_war_3d_projection
@@ -140,9 +150,9 @@ uv run --project .codex/skills/bevy-brp/script brp extras shutdown
 
 - Gameplay truth is a 2D grid projected onto either the `XY` or `XZ` plane. There is no volumetric or multi-floor visibility model in v1.
 - The occlusion model is intentionally simple: disabled or Bresenham LOS through blocker cells. Recursive shadowcasting and GPU compute are not included yet.
-- Dirty chunks are tracked for messages and diagnostics, but the built-in render upload still rewrites each active layer texture in full.
+- Dirty chunks are tracked for messages and diagnostics, but the optional render upload still rewrites each active layer texture in full.
 - There is no persistence snapshot API in v1. Consumers that need save/load should serialize their own explored-cell data from `FogOfWarMap`.
-- The built-in rendering path focuses on reusable overlays, not concealment policy. Consumers still decide when hidden or explored units should stop rendering.
+- The built-in rendering path is an optional consumer of the committed state surface, not part of the core visibility runtime. Consumers still decide when hidden or explored units should stop rendering.
 
 ## More Docs
 

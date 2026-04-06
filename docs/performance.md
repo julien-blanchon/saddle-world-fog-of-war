@@ -7,8 +7,8 @@
 1. blocker rasterization area
 2. candidate cells covered by each reveal shape
 3. LOS checks per candidate cell when `Bresenham` occlusion is enabled
-4. per-layer state commit across the whole grid
-5. full-layer texture upload for every active rendered layer
+4. per-layer persistence commit across the whole grid
+5. optional full-layer texture upload for every active rendered layer
 
 The runtime is fast on small and medium grids, but its cost still scales with both map size and revealer count because v1 recomputes visibility from current sources each frame.
 
@@ -16,6 +16,7 @@ The runtime is fast on small and medium grids, but its cost still scales with bo
 
 - `FogOfWarMap` storage:
   - one `FogVisibilityState` per cell per active layer
+  - one `bool` current-visibility slot per cell per active layer
   - one `u16` visible-count slot per cell per active layer
   - one blocker mask per cell shared across layers
 - commit cost:
@@ -30,6 +31,7 @@ Increasing `dimensions` is the most important cost lever.
 - `collect_inputs`: linear in active sources and blockers
 - `accumulate_visibility`: roughly linear in total candidate cells covered by all revealers
 - `Bresenham` LOS: candidate count multiplied by average ray length
+- `ApplyPersistence`: linear in active layer cell count; `NoMemory` is the cheapest built-in mode because it does not preserve explored state
 
 Many overlapping revealers are still merged correctly, but they are not free. If dozens of sources cover large radii, the visibility pass will dominate before the upload pass does.
 
@@ -44,7 +46,8 @@ Many overlapping revealers are still merged correctly, but they are not free. If
 `chunk_size` does **not** currently reduce:
 
 - full-layer visibility recompute cost
-- full-layer texture upload cost
+- full-layer persistence commit cost
+- full-layer texture upload cost when the optional rendering plugin is enabled
 - in-memory layer storage size
 
 Use chunking in v1 for integration and dirty-region reporting, not as a substitute for true streaming or sparse storage.
@@ -114,4 +117,4 @@ If a project outgrows the v1 path, the most natural next steps are:
 4. a shadowcasting core for strictly tile-based games
 5. an optional GPU accumulation path for very large RTS-style workloads
 
-The current public API was chosen so these upgrades can happen behind the same `FogOfWarMap` and receiver components.
+The current public API was chosen so these upgrades can happen behind the same visibility core while keeping persistence policy and rendering concerns split.

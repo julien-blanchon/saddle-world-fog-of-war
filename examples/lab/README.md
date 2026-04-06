@@ -23,6 +23,7 @@ cargo run -p saddle-world-fog-of-war-lab
 ```bash
 cargo run -p saddle-world-fog-of-war-lab --features e2e -- fog_of_war_smoke
 cargo run -p saddle-world-fog-of-war-lab --features e2e -- fog_of_war_exploration_memory
+cargo run -p saddle-world-fog-of-war-lab --features e2e -- fog_of_war_no_memory
 cargo run -p saddle-world-fog-of-war-lab --features e2e -- fog_of_war_occlusion
 cargo run -p saddle-world-fog-of-war-lab --features e2e -- fog_of_war_team_layers
 cargo run -p saddle-world-fog-of-war-lab --features e2e -- fog_of_war_3d_projection
@@ -45,4 +46,4 @@ uv run --project .codex/skills/bevy-brp/script brp extras shutdown
 
 - The lab uses explicit top-level names for revealers, blockers, receivers, and the camera so BRP queries stay stable.
 - The scene keeps both a main projected receiver and a minimap receiver alive so one map resource proves multiple presentation surfaces.
-- Motion can be paused and layer selection can be changed through E2E custom actions, which keeps screenshot checkpoints deterministic.
+- Motion can be paused, exploration memory can be toggled between `ExploredMemory` and `NoMemory`, and layer selection can be changed through the pane or E2E custom actions, which keeps screenshot checkpoints deterministic.

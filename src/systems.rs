@@ -5,6 +5,7 @@ use bevy::prelude::*;
 use crate::{
     components::{VisionCellSource, VisionOccluder, VisionSource},
     messages::VisibilityMapUpdated,
+    persistence::FogCustomPersistence,
     resources::{FogOfWarConfig, FogOfWarMap, FogOfWarStats, FogWorldAxes},
     visibility::{self, VisionCellSample, VisionOccluderSample, VisionSourceSample},
 };
@@ -28,11 +29,15 @@ pub(crate) fn activate_runtime(mut runtime: ResMut<FogRuntimeState>) {
 
 pub(crate) fn deactivate_runtime(
     mut runtime: ResMut<FogRuntimeState>,
+    config: Res<FogOfWarConfig>,
     mut map: ResMut<FogOfWarMap>,
+    custom_persistence: Option<Res<FogCustomPersistence>>,
     mut stats: ResMut<FogOfWarStats>,
 ) {
     runtime.active = false;
-    map.deactivate();
+    map.clear_blockers();
+    map.clear_visible_counts();
+    let _ = visibility::commit_visibility(&mut map, &config, custom_persistence.as_deref(), true);
 
     let (layer_count, visible_cells_total, explored_cells_total) = map.totals();
     stats.source_count = 0;
@@ -120,14 +125,17 @@ pub(crate) fn compute_visibility(
     runtime.last_raster_micros = start.elapsed().as_micros() as u64;
 }
 
-pub(crate) fn update_exploration_memory(
+pub(crate) fn apply_persistence(
     runtime: Res<FogRuntimeState>,
+    config: Res<FogOfWarConfig>,
     mut map: ResMut<FogOfWarMap>,
+    custom_persistence: Option<Res<FogCustomPersistence>>,
     mut stats: ResMut<FogOfWarStats>,
     mut writer: MessageWriter<VisibilityMapUpdated>,
 ) {
     let start = Instant::now();
-    let updates = visibility::commit_visibility(&mut map);
+    let updates =
+        visibility::commit_visibility(&mut map, &config, custom_persistence.as_deref(), false);
     let commit_micros = start.elapsed().as_micros() as u64;
     let (layer_count, visible_cells_total, explored_cells_total) = map.totals();
 

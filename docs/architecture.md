@@ -2,23 +2,25 @@
 
 ## Layering
 
-`saddle-world-fog-of-war` is split into three layers:
+`saddle-world-fog-of-war` is split into four layers:
 
 1. Pure visibility core:
    - `grid.rs`
    - `math.rs`
    - `visibility.rs`
-2. ECS integration:
+2. Persistence policy:
+   - `persistence.rs`
+3. ECS integration:
    - `components.rs`
    - `resources.rs`
    - `messages.rs`
    - `systems.rs`
-3. Rendering:
+4. Rendering:
    - `rendering/material_2d.rs`
    - `rendering/material_3d.rs`
    - `rendering/upload.rs`
 
-The core layer owns correctness. The ECS layer only gathers world inputs, updates resources, and emits messages. The rendering layer derives textures and materials from the CPU truth but never becomes the source of truth itself.
+The core layer owns grid conversion, blocker rasterization, reveal shape tests, and LOS correctness. The persistence layer decides how current visibility becomes committed state. The ECS layer only gathers world inputs, updates resources, and emits messages. The rendering layer is an optional consumer that derives textures and materials from the committed state surface but never becomes the source of truth itself.
 
 ## Runtime Flow
 
@@ -28,10 +30,10 @@ VisionSource / VisionCellSource / VisionOccluder components
   -> rebuild blocker grid
   -> rasterize reveal shapes or apply exact visible cells
   -> apply LOS per candidate cell
-  -> commit Visible / Explored / Hidden states
+  -> commit current visibility through the selected persistence mode
   -> emit VisibilityMapUpdated messages
-  -> upload per-layer R8 textures
-  -> sync 2D overlay or 3D receiver materials
+  -> optionally upload per-layer R8 textures
+  -> optionally sync 2D overlay or 3D receiver materials
 ```
 
 ## Schedule Ordering
@@ -40,14 +42,14 @@ VisionSource / VisionCellSource / VisionOccluder components
 
 1. `CollectVisionSources`
 2. `ComputeVisibility`
-3. `UpdateExplorationMemory`
+3. `ApplyPersistence`
 4. `UploadRenderData`
 
 That guarantees:
 
 - world transforms and source components are sampled before visibility is computed
-- `FogOfWarMap` is stable before messages are emitted
-- render assets only observe committed state, never half-updated intermediate buffers
+- `FogOfWarMap` current visibility and committed state are stable before messages are emitted
+- render assets only observe the committed persistence surface, never half-updated intermediate buffers
 - cross-crate bridge systems can safely run after another visibility system and before `CollectVisionSources`
 
 The plugin accepts injectable activate, deactivate, and update schedules so consumers can map the runtime into their own state machine.
@@ -63,7 +65,8 @@ What v1 does:
 - filters candidates by shape containment
 - runs Bresenham LOS from the source cell to each candidate cell when occlusion is enabled
 - merges overlapping revealers by incrementing per-cell visible counts
-- converts no-longer-visible cells from `Visible` to `Explored`
+- stores current visibility separately from the committed state surface
+- commits that current visibility through either `NoMemory`, `ExploredMemory`, or a custom policy
 
 Why this baseline was chosen:
 
@@ -90,10 +93,11 @@ What v1 does not do:
 `FogOfWarMap` stores one monolithic cell array per active layer:
 
 - `states: Vec<FogVisibilityState>`
+- `visible_now: Vec<bool>`
 - `visible_counts: Vec<u16>`
 - `dirty_chunks: HashSet<UVec2>`
 
-Chunking is used for change reporting and integration, not for storage eviction. `FogGridSpec::chunk_size` controls how `VisibilityMapUpdated` batches dirty work for consumers such as minimaps, networking layers, or custom renderers.
+`visible_now` is the core gameplay truth. `states` is the persistence-projected surface consumed by the optional renderer and any systems that want remembered exploration. Chunking is used for change reporting and integration, not for storage eviction. `FogGridSpec::chunk_size` controls how `VisibilityMapUpdated` batches dirty work for consumers such as minimaps, networking layers, or custom renderers.
 
 ## Teams And Layers
 
@@ -113,9 +117,19 @@ This keeps the API generic. One game can treat layers as factions, another as se
 
 This is why the same `FogOfWarMap` can drive both the 2D examples and the 3D projected lab.
 
+## Persistence Model
+
+Persistence is no longer hardwired to `Visible -> Explored`.
+
+- `FogPersistenceMode::NoMemory` commits `Visible` while vision is present and `Hidden` otherwise.
+- `FogPersistenceMode::ExploredMemory` preserves the original `Hidden / Explored / Visible` behavior.
+- `FogPersistenceMode::Custom` delegates each cell commit to a user-provided `FogPersistencePolicy`.
+
+This keeps the LOS and projection core reusable even when different games want different memory semantics.
+
 ## Rendering Model
 
-The rendering layer consumes `FogOfWarMap` and produces one `R8Unorm` image per active layer.
+`FogOfWarRenderingPlugin` consumes `FogOfWarMap` and produces one `R8Unorm` image per active layer.
 
 - `FogOverlay2d` spawns or updates a `Material2d` quad in world space.
 - `FogProjectionReceiver` spawns or updates a `Material` plane in 3D.
@@ -123,19 +137,20 @@ The rendering layer consumes `FogOfWarMap` and produces one `R8Unorm` image per 
 
 Important boundary:
 
-- the CPU map stores discrete truth
+- `visible_now` stores the discrete gameplay truth
+- `states` stores the committed persistence surface
 - smoothing and palette choices happen only in the material path
 
 This prevents visual polish from leaking into gameplay semantics.
 
 ## Headless And MinimalPlugins Behavior
 
-The crate checks for `RenderApp` before registering shader assets or render-side resources.
+The optional rendering plugin checks for `RenderApp` before registering shader assets or render-side resources.
 
 That means:
 
-- `DefaultPlugins` gets the full overlay/projection path
-- `MinimalPlugins` keeps the CPU truth, messages, and stats without panicking
+- `DefaultPlugins` plus `FogOfWarRenderingPlugin` gets the full overlay/projection path
+- `MinimalPlugins` plus just `FogOfWarPlugin` keeps the CPU truth, persistence, messages, and stats without panicking
 
 This split is what allows unit tests and perf probes to run headlessly.
 
@@ -144,7 +159,7 @@ This split is what allows unit tests and perf probes to run headlessly.
 The crate verifies each layer separately:
 
 - unit tests for grid conversion, state transitions, overlap behavior, LOS, arcs, and chunk addressing
-- Bevy app tests for activation, collection, message emission, deactivation, and `XZ` projection
+- Bevy app tests for activation, collection, message emission, deactivation, persistence modes, and `XZ` projection
 - standalone examples for focused 2D, occlusion, RTS-style, 3D, and cone-based usage
-- crate-local E2E scenarios for smoke, exploration memory, occlusion, layer switching, and projected 3D alignment
+- crate-local E2E scenarios for smoke, exploration memory, no-memory mode, occlusion, layer switching, and projected 3D alignment
 - BRP checks for named entities, reflected config/stats resources, and screenshot capture

@@ -1,11 +1,13 @@
 use bevy::prelude::*;
 use saddle_bevy_e2e::{action::Action, actions::assertions, scenario::Scenario};
-use saddle_world_fog_of_war::{FogLayerId, FogOfWarMap, FogOfWarRenderAssets, FogVisibilityState};
+use saddle_world_fog_of_war::{
+    FogLayerId, FogOfWarMap, FogOfWarRenderAssets, FogPersistenceMode, FogVisibilityState,
+};
 
 use crate::{
     LabControl, LabDiagnostics, MEMORY_SAMPLE_CELL, OCCLUDED_SAMPLE_CELL, TEAM_ONE_SAMPLE_CELL,
-    TEAM_ZERO_SAMPLE_CELL, place_scout_alpha, place_scout_beta, place_sentry, set_pause_motion,
-    set_selected_layer,
+    TEAM_ZERO_SAMPLE_CELL, place_scout_alpha, place_scout_beta, place_sentry,
+    set_exploration_memory, set_pause_motion, set_selected_layer,
 };
 
 #[derive(Resource, Default, Clone, Copy)]
@@ -15,6 +17,7 @@ pub fn list_scenarios() -> Vec<&'static str> {
     vec![
         "fog_of_war_smoke",
         "fog_of_war_exploration_memory",
+        "fog_of_war_no_memory",
         "fog_of_war_occlusion",
         "fog_of_war_team_layers",
         "fog_of_war_3d_projection",
@@ -25,6 +28,7 @@ pub fn scenario_by_name(name: &str) -> Option<Scenario> {
     match name {
         "fog_of_war_smoke" => Some(fog_of_war_smoke()),
         "fog_of_war_exploration_memory" => Some(fog_of_war_exploration_memory()),
+        "fog_of_war_no_memory" => Some(fog_of_war_no_memory()),
         "fog_of_war_occlusion" => Some(fog_of_war_occlusion()),
         "fog_of_war_team_layers" => Some(fog_of_war_team_layers()),
         "fog_of_war_3d_projection" => Some(fog_of_war_3d_projection()),
@@ -38,6 +42,10 @@ fn set_layer(layer: FogLayerId) -> Action {
 
 fn pause_motion(paused: bool) -> Action {
     Action::Custom(Box::new(move |world| set_pause_motion(world, paused)))
+}
+
+fn exploration_memory(enabled: bool) -> Action {
+    Action::Custom(Box::new(move |world| set_exploration_memory(world, enabled)))
 }
 
 fn move_alpha(position: Vec2) -> Action {
@@ -84,6 +92,7 @@ fn fog_of_war_exploration_memory() -> Scenario {
         .description("Move the primary scout across the arena and verify old cells degrade to explored instead of returning to hidden.")
         .then(Action::WaitFrames(2))
         .then(pause_motion(true))
+        .then(exploration_memory(true))
         .then(set_layer(FogLayerId(0)))
         .then(move_beta(Vec2::new(21.0, 14.0)))
         .then(move_alpha(Vec2::new(4.5, 4.5)))
@@ -116,11 +125,47 @@ fn fog_of_war_exploration_memory() -> Scenario {
         .build()
 }
 
+fn fog_of_war_no_memory() -> Scenario {
+    Scenario::builder("fog_of_war_no_memory")
+        .description("Disable exploration memory and verify cells return to hidden as soon as vision leaves them.")
+        .then(Action::WaitFrames(2))
+        .then(pause_motion(true))
+        .then(exploration_memory(false))
+        .then(set_layer(FogLayerId(0)))
+        .then(move_beta(Vec2::new(21.0, 14.0)))
+        .then(move_alpha(Vec2::new(4.5, 4.5)))
+        .then(Action::WaitFrames(8))
+        .then(assertions::custom("lab switched to no-memory mode", |world| {
+            world.resource::<LabDiagnostics>().persistence_mode == FogPersistenceMode::NoMemory
+        }))
+        .then(assertions::custom("sample starts visible in no-memory mode", |world| {
+            world
+                .resource::<FogOfWarMap>()
+                .visibility_at_cell(FogLayerId(0), MEMORY_SAMPLE_CELL)
+                == Some(FogVisibilityState::Visible)
+        }))
+        .then(Action::Screenshot("no_memory_visible".into()))
+        .then(Action::WaitFrames(1))
+        .then(move_alpha(Vec2::new(16.5, 4.5)))
+        .then(Action::WaitFrames(8))
+        .then(assertions::custom("sample returns to hidden", |world| {
+            world
+                .resource::<FogOfWarMap>()
+                .visibility_at_cell(FogLayerId(0), MEMORY_SAMPLE_CELL)
+                == Some(FogVisibilityState::Hidden)
+        }))
+        .then(Action::Screenshot("no_memory_hidden".into()))
+        .then(Action::WaitFrames(1))
+        .then(assertions::log_summary("fog_of_war_no_memory"))
+        .build()
+}
+
 fn fog_of_war_occlusion() -> Scenario {
     Scenario::builder("fog_of_war_occlusion")
         .description("Pin the scout against the central wall and assert that blocked cells remain hidden behind the occluder.")
         .then(Action::WaitFrames(2))
         .then(pause_motion(true))
+        .then(exploration_memory(true))
         .then(set_layer(FogLayerId(0)))
         .then(move_beta(Vec2::new(22.0, 15.0)))
         .then(move_alpha(Vec2::new(7.5, 8.5)))
@@ -148,6 +193,7 @@ fn fog_of_war_team_layers() -> Scenario {
         .description("Switch the presentation between team layers and verify the selected receiver layer and visible samples change with it.")
         .then(Action::WaitFrames(2))
         .then(pause_motion(true))
+        .then(exploration_memory(true))
         .then(move_alpha(Vec2::new(4.5, 4.5)))
         .then(move_beta(Vec2::new(20.5, 13.0)))
         .then(move_sentry(Vec2::new(18.0, 6.5), Vec2::new(-1.0, 0.0)))
@@ -188,6 +234,7 @@ fn fog_of_war_team_layers() -> Scenario {
 fn fog_of_war_3d_projection() -> Scenario {
     Scenario::builder("fog_of_war_3d_projection")
         .description("Let the camera orbit the projected fog receiver and verify the plane stays aligned while the camera moves.")
+        .then(exploration_memory(true))
         .then(pause_motion(false))
         .then(set_layer(FogLayerId(0)))
         .then(Action::WaitFrames(20))

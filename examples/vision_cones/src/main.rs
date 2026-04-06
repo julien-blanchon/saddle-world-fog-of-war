@@ -2,7 +2,10 @@ use saddle_world_fog_of_war_example_support as support;
 
 use bevy::prelude::*;
 use saddle_pane::prelude::*;
-use saddle_world_fog_of_war::{FogLayerId, FogOfWarMap, FogOfWarPlugin, FogOverlay2d, VisionSource};
+use saddle_world_fog_of_war::{
+    FogLayerId, FogOfWarMap, FogOfWarPlugin, FogOfWarRenderingPlugin, FogOverlay2d,
+    VisionSource,
+};
 
 #[derive(Component)]
 struct Sensor;
@@ -61,7 +64,10 @@ fn main() {
             PanePlugin,
         ))
         .register_pane::<ConePane>()
-        .add_plugins(FogOfWarPlugin::default().with_config(config.clone()))
+        .add_plugins((
+            FogOfWarPlugin::default().with_config(config.clone()),
+            FogOfWarRenderingPlugin::default(),
+        ))
         .add_systems(Startup, move |mut commands: Commands| {
             setup(&mut commands, &config)
         })
@@ -72,7 +78,7 @@ fn main() {
         .add_systems(Update, spin_sensor)
         .add_systems(
             Update,
-            update_pane.after(saddle_world_fog_of_war::FogOfWarSystems::UpdateExplorationMemory),
+            update_pane.after(saddle_world_fog_of_war::FogOfWarSystems::ApplyPersistence),
         )
         .run();
 }
@@ -114,6 +120,11 @@ fn setup(commands: &mut Commands, config: &saddle_world_fog_of_war::FogOfWarConf
         config.grid.origin,
         config.grid.world_size(),
         support::layer_palette(0.96, 0.76),
+    );
+    support::spawn_instructions(
+        commands,
+        "Vision Cones",
+        "Use the pane in the top-right to pause the sentry, widen or narrow the cone, change spin speed, and soften the fog edge.\nThe rotating arc shows that the fog core is shape-driven rather than circle-only.",
     );
 }
 

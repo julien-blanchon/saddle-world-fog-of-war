@@ -236,3 +236,24 @@ pub fn moving_arc_shape(angle: f32, radius_cells: f32, spread_radians: f32) -> F
         Vec2::from_angle(angle),
     )
 }
+
+pub fn spawn_instructions(commands: &mut Commands, name: &str, body: &str) {
+    commands.spawn((
+        Name::new(format!("{name} Instructions")),
+        Node {
+            position_type: PositionType::Absolute,
+            left: px(18.0),
+            bottom: px(18.0),
+            width: px(440.0),
+            padding: UiRect::all(px(12.0)),
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.03, 0.04, 0.06, 0.84)),
+        Text::new(body.to_string()),
+        TextFont {
+            font_size: 15.0,
+            ..default()
+        },
+        TextColor(Color::WHITE),
+    ));
+}

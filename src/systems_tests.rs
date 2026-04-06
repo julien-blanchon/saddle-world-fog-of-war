@@ -5,6 +5,7 @@ use crate::{
     FogOfWarPlugin, FogOfWarSystems,
     grid::{FogGridSpec, FogLayerId},
     messages::VisibilityMapUpdated,
+    persistence::FogPersistenceMode,
     resources::{FogOfWarConfig, FogOfWarMap, FogOfWarStats},
 };
 
@@ -57,7 +58,7 @@ fn plugin_collects_entities_emits_messages_and_clears_on_deactivate() {
     );
     app.add_systems(
         Update,
-        collect_updates.after(FogOfWarSystems::UpdateExplorationMemory),
+        collect_updates.after(FogOfWarSystems::ApplyPersistence),
     );
 
     app.world_mut().spawn((
@@ -95,6 +96,33 @@ fn plugin_collects_entities_emits_messages_and_clears_on_deactivate() {
         0
     );
     assert!(app.world().resource::<FogOfWarStats>().explored_cells_total > 0);
+}
+
+#[test]
+fn deactivate_respects_no_memory_mode() {
+    let mut config = test_config();
+    config.persistence_mode = FogPersistenceMode::NoMemory;
+
+    let mut app = App::new();
+    app.add_plugins(MinimalPlugins);
+    app.init_schedule(DeactivateSchedule);
+    app.add_plugins(FogOfWarPlugin::new(Startup, DeactivateSchedule, Update).with_config(config));
+
+    app.world_mut().spawn((
+        Transform::from_xyz(2.5, 2.5, 0.0),
+        GlobalTransform::from_xyz(2.5, 2.5, 0.0),
+        crate::components::VisionSource::circle(FogLayerId(0), 2.5),
+    ));
+
+    app.update();
+    app.world_mut().run_schedule(DeactivateSchedule);
+
+    assert_eq!(
+        app.world()
+            .resource::<FogOfWarMap>()
+            .visibility_at_cell(FogLayerId(0), IVec2::new(2, 2)),
+        Some(crate::grid::FogVisibilityState::Hidden)
+    );
 }
 
 #[test]

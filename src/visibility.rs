@@ -5,6 +5,7 @@ use crate::{
     grid::{FogLayerMask, FogVisibilityState},
     math::{bresenham_line, safe_normalize_or},
     messages::VisibilityMapUpdated,
+    persistence::{FogCustomPersistence, FogPersistenceCell, commit_builtin_cell},
     resources::FogOfWarMap,
 };
 
@@ -122,7 +123,12 @@ pub(crate) fn accumulate_visibility(
     }
 }
 
-pub(crate) fn commit_visibility(map: &mut FogOfWarMap) -> Vec<VisibilityMapUpdated> {
+pub(crate) fn commit_visibility(
+    map: &mut FogOfWarMap,
+    config: &crate::resources::FogOfWarConfig,
+    custom_persistence: Option<&FogCustomPersistence>,
+    deactivating: bool,
+) -> Vec<VisibilityMapUpdated> {
     let grid = map.grid();
     let mut updates = Vec::new();
 
@@ -133,22 +139,34 @@ pub(crate) fn commit_visibility(map: &mut FogOfWarMap) -> Vec<VisibilityMapUpdat
 
         for index in 0..layer_state.states.len() {
             let previous = layer_state.states[index];
-            let next = if layer_state.visible_counts[index] > 0 {
-                FogVisibilityState::Visible
-            } else if previous == FogVisibilityState::Hidden {
-                FogVisibilityState::Hidden
+            let previous_visible = layer_state.visible_now[index];
+            let visible_now = !deactivating && layer_state.visible_counts[index] > 0;
+            let cell = grid.cell_from_index(index);
+            let persistence_cell = FogPersistenceCell {
+                layer: layer_id,
+                cell,
+                visible_now,
+                previous_state: previous,
+            };
+            let next = if let Some(custom_persistence) = custom_persistence {
+                if deactivating {
+                    custom_persistence.deactivate_cell(persistence_cell)
+                } else {
+                    custom_persistence.commit_cell(persistence_cell)
+                }
             } else {
-                FogVisibilityState::Explored
+                commit_builtin_cell(config.persistence_mode, persistence_cell)
             };
 
-            if next != previous {
-                if let Some(chunk) = grid.chunk_for_cell(grid.cell_from_index(index)) {
+            if next != previous || visible_now != previous_visible {
+                if let Some(chunk) = grid.chunk_for_cell(cell) {
                     layer_state.dirty_chunks.insert(chunk.0);
                 }
                 layer_state.states[index] = next;
+                layer_state.visible_now[index] = visible_now;
             }
 
-            if next == FogVisibilityState::Visible {
+            if visible_now {
                 visible_cells += 1;
             }
             if next != FogVisibilityState::Hidden {

@@ -3,7 +3,8 @@ use saddle_world_fog_of_war_example_support as support;
 use bevy::prelude::*;
 use saddle_pane::prelude::*;
 use saddle_world_fog_of_war::{
-    FogLayerId, FogOfWarMap, FogOfWarPlugin, FogOverlay2d, FogRevealShape, VisionSource,
+    FogLayerId, FogOfWarMap, FogOfWarPlugin, FogOfWarRenderingPlugin, FogOverlay2d,
+    FogRevealShape, VisionSource,
 };
 
 #[derive(Component)]
@@ -64,7 +65,10 @@ fn main() {
             PanePlugin,
         ))
         .register_pane::<RtsPane>()
-        .add_plugins(FogOfWarPlugin::default().with_config(config.clone()))
+        .add_plugins((
+            FogOfWarPlugin::default().with_config(config.clone()),
+            FogOfWarRenderingPlugin::default(),
+        ))
         .add_systems(Startup, move |mut commands: Commands| {
             setup(&mut commands, &config)
         })
@@ -75,7 +79,7 @@ fn main() {
         .add_systems(Update, orbit_scouts)
         .add_systems(
             Update,
-            update_pane.after(saddle_world_fog_of_war::FogOfWarSystems::UpdateExplorationMemory),
+            update_pane.after(saddle_world_fog_of_war::FogOfWarSystems::ApplyPersistence),
         )
         .run();
 }
@@ -141,6 +145,11 @@ fn setup(commands: &mut Commands, config: &saddle_world_fog_of_war::FogOfWarConf
         Vec2::new(config.grid.world_size().x - 420.0, 20.0),
         Vec2::new(400.0, 266.0),
         support::layer_palette(0.82, 0.58),
+    );
+    support::spawn_instructions(
+        commands,
+        "RTS Large Map",
+        "Use the pane in the top-right to pause the scout rings, scale their orbit speed, widen the reveal radius, and soften both fog overlays.\nThe lower-right inset reuses the same fog layer as a minimap-style second presentation.",
     );
 }
 

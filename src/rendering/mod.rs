@@ -10,7 +10,7 @@ use bevy::{
     shader::Shader,
 };
 
-use crate::FogOfWarSystems;
+use crate::{FogOfWarSystems, resources::FogOfWarRenderAssets};
 
 pub(crate) use material_2d::FogOverlayMaterial2d;
 pub(crate) use material_3d::FogProjectionMaterial3d;
@@ -21,6 +21,8 @@ pub(crate) const FOG_OVERLAY_3D_SHADER_HANDLE: Handle<Shader> =
     uuid_handle!("c59e0fac-85d5-43ec-b373-8ae02058c5ef");
 
 pub(crate) fn plugin(app: &mut App, update_schedule: impl ScheduleLabel) {
+    app.init_resource::<FogOfWarRenderAssets>();
+
     if app.get_sub_app(RenderApp).is_none() {
         app.add_systems(
             update_schedule,

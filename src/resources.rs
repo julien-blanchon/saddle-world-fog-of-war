@@ -3,6 +3,7 @@ use std::collections::{HashMap, HashSet};
 use bevy::{asset::Handle, image::Image, prelude::*};
 
 use crate::grid::{FogGridSpec, FogLayerId, FogLayerMask, FogVisibilityState};
+use crate::persistence::FogPersistenceMode;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Reflect)]
 pub enum FogOcclusionMode {
@@ -22,6 +23,7 @@ pub struct FogOfWarConfig {
     pub grid: FogGridSpec,
     pub occlusion_mode: FogOcclusionMode,
     pub world_axes: FogWorldAxes,
+    pub persistence_mode: FogPersistenceMode,
 }
 
 impl Default for FogOfWarConfig {
@@ -30,6 +32,7 @@ impl Default for FogOfWarConfig {
             grid: FogGridSpec::default(),
             occlusion_mode: FogOcclusionMode::Bresenham,
             world_axes: FogWorldAxes::XY,
+            persistence_mode: FogPersistenceMode::ExploredMemory,
         }
     }
 }
@@ -67,6 +70,7 @@ impl FogOfWarRenderAssets {
 #[derive(Debug, Clone)]
 pub(crate) struct FogLayerState {
     pub states: Vec<FogVisibilityState>,
+    pub visible_now: Vec<bool>,
     pub visible_counts: Vec<u16>,
     pub dirty_chunks: HashSet<UVec2>,
     pub visible_cells: usize,
@@ -77,6 +81,7 @@ impl FogLayerState {
     fn new(cell_count: usize) -> Self {
         Self {
             states: vec![FogVisibilityState::Hidden; cell_count],
+            visible_now: vec![false; cell_count],
             visible_counts: vec![0; cell_count],
             dirty_chunks: HashSet::new(),
             visible_cells: 0,
@@ -122,6 +127,14 @@ impl FogOfWarMap {
             .or(Some(FogVisibilityState::Hidden))
     }
 
+    pub fn current_visibility_at_cell(&self, layer: FogLayerId, cell: IVec2) -> Option<bool> {
+        let index = self.config.grid.index(cell)?;
+        self.layers
+            .get(&layer)
+            .map(|state| state.visible_now[index])
+            .or(Some(false))
+    }
+
     pub fn visibility_at_world_pos(
         &self,
         layer: FogLayerId,
@@ -132,7 +145,7 @@ impl FogOfWarMap {
     }
 
     pub fn is_visible(&self, layer: FogLayerId, cell: IVec2) -> bool {
-        self.visibility_at_cell(layer, cell) == Some(FogVisibilityState::Visible)
+        self.current_visibility_at_cell(layer, cell) == Some(true)
     }
 
     pub fn is_explored(&self, layer: FogLayerId, cell: IVec2) -> bool {
@@ -144,12 +157,10 @@ impl FogOfWarMap {
         let grid = self.config.grid;
         self.layers.get(&layer).into_iter().flat_map(move |state| {
             state
-                .states
+                .visible_now
                 .iter()
                 .enumerate()
-                .filter_map(move |(index, cell)| {
-                    (*cell == FogVisibilityState::Visible).then_some(grid.cell_from_index(index))
-                })
+                .filter_map(move |(index, cell)| (*cell).then_some(grid.cell_from_index(index)))
         })
     }
 
@@ -241,29 +252,6 @@ impl FogOfWarMap {
                 )
             },
         )
-    }
-
-    pub(crate) fn deactivate(&mut self) {
-        let grid = self.config.grid;
-        for (_, state) in self.layers_mut() {
-            state.dirty_chunks.clear();
-            state.visible_cells = 0;
-            state.explored_cells = 0;
-            for (index, cell_state) in state.states.iter_mut().enumerate() {
-                state.visible_counts[index] = 0;
-                if *cell_state == FogVisibilityState::Visible {
-                    *cell_state = FogVisibilityState::Explored;
-                    if let Some(chunk) = grid.chunk_for_cell(grid.cell_from_index(index)) {
-                        state.dirty_chunks.insert(chunk.0);
-                    }
-                }
-
-                if *cell_state != FogVisibilityState::Hidden {
-                    state.explored_cells += 1;
-                }
-            }
-        }
-        self.clear_blockers();
     }
 
     pub(crate) fn state_byte(state: FogVisibilityState) -> u8 {

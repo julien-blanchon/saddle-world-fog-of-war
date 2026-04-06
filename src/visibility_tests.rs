@@ -3,11 +3,18 @@ use super::*;
 use crate::{
     components::{FogOccluderShape, FogRevealShape},
     grid::{FogGridSpec, FogLayerId, FogLayerMask},
+    persistence::{
+        FogCustomPersistence, FogPersistenceCell, FogPersistenceMode, FogPersistencePolicy,
+    },
     resources::{FogOcclusionMode, FogOfWarConfig, FogOfWarMap},
 };
 
 fn test_map() -> FogOfWarMap {
-    FogOfWarMap::new(FogOfWarConfig {
+    FogOfWarMap::new(test_config())
+}
+
+fn test_config() -> FogOfWarConfig {
+    FogOfWarConfig {
         grid: FogGridSpec {
             origin: Vec2::ZERO,
             dimensions: UVec2::new(12, 12),
@@ -16,7 +23,12 @@ fn test_map() -> FogOfWarMap {
         },
         occlusion_mode: FogOcclusionMode::Bresenham,
         ..default()
-    })
+    }
+}
+
+fn commit_default(map: &mut FogOfWarMap) {
+    let config = map.config().clone();
+    commit_visibility(map, &config, None, false);
 }
 
 #[test]
@@ -30,21 +42,21 @@ fn hidden_visible_explored_visible_flow_is_stable() {
 
     rebuild_blockers(&mut map, &[]);
     accumulate_visibility(&mut map, &[source], &[]);
-    commit_visibility(&mut map);
+    commit_default(&mut map);
     assert_eq!(
         map.visibility_at_cell(FogLayerId(0), IVec2::new(2, 2)),
         Some(FogVisibilityState::Visible)
     );
 
     accumulate_visibility(&mut map, &[], &[]);
-    commit_visibility(&mut map);
+    commit_default(&mut map);
     assert_eq!(
         map.visibility_at_cell(FogLayerId(0), IVec2::new(2, 2)),
         Some(FogVisibilityState::Explored)
     );
 
     accumulate_visibility(&mut map, &[source], &[]);
-    commit_visibility(&mut map);
+    commit_default(&mut map);
     assert_eq!(
         map.visibility_at_cell(FogLayerId(0), IVec2::new(2, 2)),
         Some(FogVisibilityState::Visible)
@@ -71,7 +83,7 @@ fn overlapping_sources_merge_without_leaking_layers() {
     };
 
     accumulate_visibility(&mut map, &[primary, secondary, other_layer], &[]);
-    commit_visibility(&mut map);
+    commit_default(&mut map);
 
     assert!(map.is_visible(FogLayerId(0), IVec2::new(5, 4)));
     assert!(!map.is_visible(FogLayerId(1), IVec2::new(5, 4)));
@@ -88,7 +100,7 @@ fn arc_reveal_only_hits_forward_cells() {
     };
 
     accumulate_visibility(&mut map, &[source], &[]);
-    commit_visibility(&mut map);
+    commit_default(&mut map);
 
     assert!(map.is_visible(FogLayerId(0), IVec2::new(7, 4)));
     assert!(!map.is_visible(FogLayerId(0), IVec2::new(2, 4)));
@@ -110,7 +122,7 @@ fn blockers_stop_visibility_behind_walls() {
 
     rebuild_blockers(&mut map, &[occluder]);
     accumulate_visibility(&mut map, &[source], &[]);
-    commit_visibility(&mut map);
+    commit_default(&mut map);
 
     assert!(map.is_visible(FogLayerId(0), IVec2::new(5, 4)));
     assert!(!map.is_visible(FogLayerId(0), IVec2::new(8, 4)));
@@ -128,7 +140,71 @@ fn manual_cell_sources_reveal_cells_without_shape_rasterization() {
             cell: IVec2::new(3, 7),
         }],
     );
-    commit_visibility(&mut map);
+    commit_default(&mut map);
 
     assert!(map.is_visible(FogLayerId(0), IVec2::new(3, 7)));
+}
+
+#[test]
+fn no_memory_mode_hides_cells_immediately() {
+    let mut config = test_config();
+    config.persistence_mode = FogPersistenceMode::NoMemory;
+    let mut map = FogOfWarMap::new(config.clone());
+    let source = VisionSourceSample {
+        layer: FogLayerId(0),
+        position: Vec2::new(2.5, 2.5),
+        shape: FogRevealShape::circle(2.2),
+    };
+
+    accumulate_visibility(&mut map, &[source], &[]);
+    commit_visibility(&mut map, &config, None, false);
+    assert_eq!(
+        map.visibility_at_cell(FogLayerId(0), IVec2::new(2, 2)),
+        Some(FogVisibilityState::Visible)
+    );
+
+    accumulate_visibility(&mut map, &[], &[]);
+    commit_visibility(&mut map, &config, None, false);
+    assert_eq!(
+        map.visibility_at_cell(FogLayerId(0), IVec2::new(2, 2)),
+        Some(FogVisibilityState::Hidden)
+    );
+}
+
+#[derive(Clone, Copy)]
+struct StickyVisiblePolicy;
+
+impl FogPersistencePolicy for StickyVisiblePolicy {
+    fn commit_cell(&self, cell: FogPersistenceCell) -> FogVisibilityState {
+        if cell.visible_now || cell.previous_state == FogVisibilityState::Visible {
+            FogVisibilityState::Visible
+        } else {
+            FogVisibilityState::Hidden
+        }
+    }
+}
+
+#[test]
+fn custom_persistence_can_keep_state_visible_without_affecting_current_visibility_queries() {
+    let mut config = test_config();
+    config.persistence_mode = FogPersistenceMode::Custom;
+    let mut map = FogOfWarMap::new(config.clone());
+    let policy = FogCustomPersistence::new(StickyVisiblePolicy);
+    let source = VisionSourceSample {
+        layer: FogLayerId(0),
+        position: Vec2::new(2.5, 2.5),
+        shape: FogRevealShape::circle(2.2),
+    };
+
+    accumulate_visibility(&mut map, &[source], &[]);
+    commit_visibility(&mut map, &config, Some(&policy), false);
+    assert!(map.is_visible(FogLayerId(0), IVec2::new(2, 2)));
+
+    accumulate_visibility(&mut map, &[], &[]);
+    commit_visibility(&mut map, &config, Some(&policy), false);
+    assert!(!map.is_visible(FogLayerId(0), IVec2::new(2, 2)));
+    assert_eq!(
+        map.visibility_at_cell(FogLayerId(0), IVec2::new(2, 2)),
+        Some(FogVisibilityState::Visible)
+    );
 }

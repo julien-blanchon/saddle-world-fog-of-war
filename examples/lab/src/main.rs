@@ -11,8 +11,8 @@ use bevy_brp_extras::BrpExtrasPlugin;
 use saddle_pane::prelude::*;
 use saddle_world_fog_of_war::{
     FogLayerId, FogLayerSummary, FogOfWarConfig, FogOfWarMap, FogOfWarPlugin,
-    FogProjectionReceiver, FogRevealShape, FogVisibilityState, FogWorldAxes, VisionOccluder,
-    VisionSource,
+    FogOfWarRenderingPlugin, FogPersistenceMode, FogProjectionReceiver, FogRevealShape,
+    FogVisibilityState, FogWorldAxes, VisionOccluder, VisionSource,
 };
 
 pub const MEMORY_SAMPLE_CELL: IVec2 = IVec2::new(4, 4);
@@ -50,6 +50,8 @@ struct LabEntities {
 pub struct LabControl {
     #[pane]
     pub pause_motion: bool,
+    #[pane]
+    pub exploration_memory: bool,
     #[pane(skip)]
     pub selected_layer: FogLayerId,
     #[pane(slider, min = 2.0, max = 7.5, step = 0.1)]
@@ -74,6 +76,7 @@ impl Default for LabControl {
     fn default() -> Self {
         Self {
             pause_motion: false,
+            exploration_memory: true,
             selected_layer: FogLayerId(0),
             scout_alpha_radius: 4.8,
             scout_beta_radius: 4.0,
@@ -91,6 +94,7 @@ impl Default for LabControl {
 pub struct LabDiagnostics {
     pub selected_layer: FogLayerId,
     pub main_receiver_layer: FogLayerId,
+    pub persistence_mode: FogPersistenceMode,
     pub layer_zero: FogLayerSummary,
     pub layer_one: FogLayerSummary,
     pub memory_sample: FogVisibilityState,
@@ -106,6 +110,7 @@ impl Default for LabDiagnostics {
         Self {
             selected_layer: FogLayerId(0),
             main_receiver_layer: FogLayerId(0),
+            persistence_mode: FogPersistenceMode::ExploredMemory,
             layer_zero: FogLayerSummary {
                 visible_cells: 0,
                 explored_cells: 0,
@@ -146,7 +151,10 @@ fn main() {
     #[cfg(feature = "e2e")]
     app.add_plugins(e2e::FogOfWarLabE2EPlugin);
 
-    app.add_plugins(FogOfWarPlugin::default().with_config(lab_config()));
+    app.add_plugins((
+        FogOfWarPlugin::default().with_config(lab_config()),
+        FogOfWarRenderingPlugin::default(),
+    ));
     app.add_plugins((
         bevy_flair::FlairPlugin,
         bevy_input_focus::InputDispatchPlugin,
@@ -159,13 +167,14 @@ fn main() {
     app.add_systems(
         Update,
         (
+            sync_runtime_config.before(saddle_world_fog_of_war::FogOfWarSystems::CollectVisionSources),
             sync_demo_controls.before(saddle_world_fog_of_war::FogOfWarSystems::CollectVisionSources),
             animate_scout_alpha,
             animate_scout_beta,
             animate_sentry,
             orbit_camera,
             sync_receivers.before(saddle_world_fog_of_war::FogOfWarSystems::UploadRenderData),
-            update_diagnostics.after(saddle_world_fog_of_war::FogOfWarSystems::UpdateExplorationMemory),
+            update_diagnostics.after(saddle_world_fog_of_war::FogOfWarSystems::ApplyPersistence),
             update_overlay.after(saddle_world_fog_of_war::FogOfWarSystems::UploadRenderData),
         ),
     );
@@ -180,6 +189,18 @@ fn lab_config() -> FogOfWarConfig {
     config.grid.chunk_size = UVec2::splat(8);
     config.world_axes = FogWorldAxes::XZ;
     config
+}
+
+fn sync_runtime_config(control: Res<LabControl>, mut config: ResMut<FogOfWarConfig>) {
+    if !control.is_changed() {
+        return;
+    }
+
+    config.persistence_mode = if control.exploration_memory {
+        FogPersistenceMode::ExploredMemory
+    } else {
+        FogPersistenceMode::NoMemory
+    };
 }
 
 fn setup(
@@ -512,6 +533,7 @@ fn update_diagnostics(
     mut diagnostics: ResMut<LabDiagnostics>,
 ) {
     diagnostics.selected_layer = control.selected_layer;
+    diagnostics.persistence_mode = map.config().persistence_mode;
     diagnostics.layer_zero = map.layer_summary(FogLayerId(0)).unwrap_or(FogLayerSummary {
         visible_cells: 0,
         explored_cells: 0,
@@ -557,8 +579,9 @@ fn update_overlay(
     };
 
     text.0 = format!(
-        "Fog Of War Lab\nSelected layer {}\nLayer 0 visible/explored: {}/{}\nLayer 1 visible/explored: {}/{}\nMemory sample: {:?}\nOccluded sample: {:?}\nScout alpha: {:.1?}\nScout beta: {:.1?}\nSentry: {:.1?}",
+        "Fog Of War Lab\nPane controls: pause motion, toggle exploration memory, adjust scout radii, sentry spread, camera orbit, and edge softness.\nSelected layer {}\nPersistence mode: {:?}\nLayer 0 visible/explored: {}/{}\nLayer 1 visible/explored: {}/{}\nMemory sample: {:?}\nOccluded sample: {:?}\nScout alpha: {:.1?}\nScout beta: {:.1?}\nSentry: {:.1?}",
         diagnostics.selected_layer.0,
+        diagnostics.persistence_mode,
         diagnostics.layer_zero.visible_cells,
         diagnostics.layer_zero.explored_cells,
         diagnostics.layer_one.visible_cells,
@@ -579,6 +602,11 @@ pub(crate) fn set_selected_layer(world: &mut World, layer: FogLayerId) {
 #[cfg(feature = "e2e")]
 pub(crate) fn set_pause_motion(world: &mut World, paused: bool) {
     world.resource_mut::<LabControl>().pause_motion = paused;
+}
+
+#[cfg(feature = "e2e")]
+pub(crate) fn set_exploration_memory(world: &mut World, enabled: bool) {
+    world.resource_mut::<LabControl>().exploration_memory = enabled;
 }
 
 #[cfg(feature = "e2e")]

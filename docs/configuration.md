@@ -9,6 +9,26 @@ This document covers the main public tuning surfaces. Defaults describe the buil
 | `grid` | `FogGridSpec` | `origin = Vec2::ZERO`, `dimensions = 64x64`, `cell_size = 1x1`, `chunk_size = 16x16` | positive dimensions and positive cell size | dominant driver of memory and upload cost | defines the discretized world, dirty-chunk granularity, and query bounds | determines the texture size and overlay scaling |
 | `occlusion_mode` | `FogOcclusionMode` | `Bresenham` | `Disabled` or `Bresenham` | `Bresenham` adds LOS work per candidate cell | decides whether blockers matter for visibility truth | changes the visible silhouette and wall shadowing in overlays |
 | `world_axes` | `FogWorldAxes` | `XY` | `XY` or `XZ` | negligible | decides which transform plane maps into fog cells | keeps 2D overlays and 3D ground-plane receivers aligned to the same truth |
+| `persistence_mode` | `FogPersistenceMode` | `ExploredMemory` | `NoMemory`, `ExploredMemory`, or `Custom` | `NoMemory` is cheapest; custom depends on your policy | decides how current visibility becomes the committed state surface | controls whether remembered exploration survives after vision leaves |
+
+## `FogPersistenceMode`
+
+| Variant | Default | Perf impact | Gameplay effect | Rendering effect |
+| --- | --- | --- | --- | --- |
+| `NoMemory` | no | cheapest built-in mode | cells return to `Hidden` as soon as they leave current vision | overlays and receivers show only current sight |
+| `ExploredMemory` | yes | same cost profile as v1 | cells degrade from `Visible` to `Explored` and never return to hidden automatically | preserves a classic RTS/roguelike explored shroud |
+| `Custom` | no | depends on your policy | lets a `FogPersistencePolicy` decide the committed state per cell | built-in renderer consumes whatever `Hidden` / `Explored` / `Visible` states your policy emits |
+
+## `FogPersistencePolicy`
+
+Custom persistence policies receive a `FogPersistenceCell` containing:
+
+- `layer`
+- `cell`
+- `visible_now`
+- `previous_state`
+
+Implement the trait and pass it through `FogOfWarPlugin::with_custom_persistence(...)` when you need non-default commit rules.
 
 ## `FogGridSpec`
 
@@ -78,6 +98,8 @@ Guidance:
 
 ## `FogOverlay2d`
 
+`FogOverlay2d` is only rendered when `FogOfWarRenderingPlugin` is enabled.
+
 | Field | Type | Default from `FogOverlay2d::new` | Valid range | Perf impact | Gameplay effect | Rendering effect |
 | --- | --- | --- | --- | --- | --- | --- |
 | `layer` | `FogLayerId` | constructor-provided | `0..=63` | one active layer texture per presented layer | none directly | chooses which layer texture is shown |
@@ -89,6 +111,8 @@ Guidance:
 | `z` | `f32` | `20.0` | any finite value | negligible | none | draw order / depth within 2D scenes |
 
 ## `FogProjectionReceiver`
+
+`FogProjectionReceiver` is only rendered when `FogOfWarRenderingPlugin` is enabled.
 
 | Field | Type | Default from `FogProjectionReceiver::new` | Valid range | Perf impact | Gameplay effect | Rendering effect |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -117,9 +141,9 @@ Preset helpers:
 
 | Resource | Purpose | Notes |
 | --- | --- | --- |
-| `FogOfWarMap` | gameplay-truth query surface | primary resource for AI, gameplay, minimap logic, and save systems |
+| `FogOfWarMap` | gameplay-truth and committed-state query surface | use `is_visible` / `current_visibility_at_cell` for current truth, and `visibility_at_cell` / `iter_explored_cells` for remembered state |
 | `FogOfWarStats` | per-frame counts and microsecond timings | reflected for BRP inspection |
-| `FogOfWarRenderAssets` | per-layer `Handle<Image>` output | lets custom materials or UI reuse the generated textures |
+| `FogOfWarRenderAssets` | per-layer `Handle<Image>` output | only initialized by `FogOfWarRenderingPlugin`; lets custom materials or UI reuse the generated textures |
 
 ## Practical Tuning Advice
 
@@ -127,3 +151,5 @@ Preset helpers:
 - Prefer `chunk_size = 8..32` when downstream systems consume dirty updates. It has little effect on the built-in renderer in v1.
 - Use `world_axes = XZ` whenever revealers move on the 3D ground plane. This avoids mixing camera height into the fog truth.
 - Leave `occlusion_mode = Disabled` for terrain shrouds where walls do not matter, then switch to `Bresenham` when blockers become part of gameplay.
+- Use `NoMemory` when the fog should represent only present line-of-sight, and `ExploredMemory` when discovered terrain should remain revealed.
+- Keep `Custom` for games that need non-default degradation rules; the core grid and LOS systems stay unchanged while only the persistence step changes.
