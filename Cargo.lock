@@ -4252,6 +4252,7 @@ name = "saddle-world-fog-of-war"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "web-time",
 ]
 
 [[package]]

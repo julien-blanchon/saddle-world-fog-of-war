@@ -1,5 +1,3 @@
-use bevy::platform::time::Instant;
-
 use bevy::{
     asset::RenderAssetUsages,
     image::ImageSampler,
@@ -8,6 +6,11 @@ use bevy::{
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
     sprite_render::MeshMaterial2d,
 };
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::Instant;
+#[cfg(target_arch = "wasm32")]
+use web_time::Instant;
 
 use crate::{
     components::{FogOverlay2d, FogProjectionReceiver},

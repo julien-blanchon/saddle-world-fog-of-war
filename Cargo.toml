@@ -10,6 +10,9 @@ description = "Reusable fog-of-war and visibility framework for Bevy"
 [dependencies]
 bevy = "0.18"
 
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+web-time = "1"
+
 [workspace]
 
 [lints.clippy]
