@@ -160,6 +160,7 @@ The crate verifies each layer separately:
 
 - unit tests for grid conversion, state transitions, overlap behavior, LOS, arcs, and chunk addressing
 - Bevy app tests for activation, collection, message emission, deactivation, persistence modes, and `XZ` projection
-- standalone examples for focused 2D, occlusion, RTS-style, 3D, and cone-based usage
-- crate-local E2E scenarios for smoke, exploration memory, no-memory mode, occlusion, layer switching, and projected 3D alignment
+- standalone examples for focused 2D, occlusion, RTS-style, 3D, cone-based, and cross-crate FOV usage
+- example-local E2E scenarios so each showcase proves its own core behavior with screenshots and assertions
+- crate-local lab E2E scenarios for smoke, exploration memory, no-memory mode, occlusion, layer switching, and projected 3D alignment across one integrated scene
 - BRP checks for named entities, reflected config/stats resources, and screenshot capture

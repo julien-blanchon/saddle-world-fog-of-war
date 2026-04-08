@@ -1,4 +1,7 @@
-use bevy::{ecs::schedule::ScheduleLabel, prelude::*};
+use bevy::{
+    ecs::{message::Messages, schedule::ScheduleLabel},
+    prelude::*,
+};
 
 use super::*;
 use crate::{
@@ -60,6 +63,10 @@ fn plugin_collects_entities_emits_messages_and_clears_on_deactivate() {
         Update,
         collect_updates.after(FogOfWarSystems::ApplyPersistence),
     );
+    app.add_systems(
+        DeactivateSchedule,
+        collect_updates.after(super::deactivate_runtime),
+    );
 
     app.world_mut().spawn((
         Transform::from_xyz(2.5, 2.5, 0.0),
@@ -79,6 +86,9 @@ fn plugin_collects_entities_emits_messages_and_clears_on_deactivate() {
     assert_eq!(app.world().resource::<FogOfWarStats>().source_count, 1);
     assert!(app.world().resource::<FogOfWarStats>().visible_cells_total > 0);
     assert_eq!(app.world().resource::<UpdateCapture>().0.len(), 1);
+    app.world_mut()
+        .resource_mut::<Messages<VisibilityMapUpdated>>()
+        .clear();
 
     app.world_mut().run_schedule(DeactivateSchedule);
 
@@ -96,6 +106,8 @@ fn plugin_collects_entities_emits_messages_and_clears_on_deactivate() {
         0
     );
     assert!(app.world().resource::<FogOfWarStats>().explored_cells_total > 0);
+    assert_eq!(app.world().resource::<UpdateCapture>().0.len(), 2);
+    assert!(app.world().resource::<FogOfWarStats>().dirty_chunk_count > 0);
 }
 
 #[test]

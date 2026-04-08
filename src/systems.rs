@@ -33,19 +33,25 @@ pub(crate) fn deactivate_runtime(
     mut map: ResMut<FogOfWarMap>,
     custom_persistence: Option<Res<FogCustomPersistence>>,
     mut stats: ResMut<FogOfWarStats>,
+    mut writer: MessageWriter<VisibilityMapUpdated>,
 ) {
     runtime.active = false;
     map.clear_blockers();
     map.clear_visible_counts();
-    let _ = visibility::commit_visibility(&mut map, &config, custom_persistence.as_deref(), true);
+    let updates =
+        visibility::commit_visibility(&mut map, &config, custom_persistence.as_deref(), true);
 
     let (layer_count, visible_cells_total, explored_cells_total) = map.totals();
     stats.source_count = 0;
     stats.occluder_count = 0;
     stats.layer_count = layer_count;
-    stats.dirty_chunk_count = 0;
+    stats.dirty_chunk_count = updates.iter().map(|update| update.dirty_chunks.len()).sum();
     stats.visible_cells_total = visible_cells_total;
     stats.explored_cells_total = explored_cells_total;
+
+    for update in updates {
+        writer.write(update);
+    }
 }
 
 pub(crate) fn runtime_is_active(runtime: Res<FogRuntimeState>) -> bool {

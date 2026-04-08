@@ -5051,6 +5051,7 @@ name = "saddle-world-fog-of-war-example-support"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "saddle-bevy-e2e",
  "saddle-world-fog-of-war",
 ]
 

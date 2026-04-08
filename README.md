@@ -102,19 +102,19 @@ Full field-by-field guidance lives in [docs/configuration.md](docs/configuration
 
 ## Examples
 
-| Example | Purpose | Run |
-| --- | --- | --- |
-| `basic_2d` | Minimal room-and-corridor style overlay with one moving revealer and exploration memory | `cargo run -p saddle-world-fog-of-war-example-basic-2d` |
-| `occlusion_2d` | Blocker-driven LOS example showing hidden cells behind walls | `cargo run -p saddle-world-fog-of-war-example-occlusion-2d` |
-| `rts_large_map` | Larger shared-layer shroud with many revealers and minimap reuse | `cargo run -p saddle-world-fog-of-war-example-rts-large-map` |
-| `projected_3d` | Same CPU truth rendered on a 3D ground-plane receiver | `cargo run -p saddle-world-fog-of-war-example-projected-3d` |
-| `vision_cones` | Arc-based revealers proving the crate is not limited to circles | `cargo run -p saddle-world-fog-of-war-example-vision-cones` |
-| `fov_integration` | Cross-crate demo where `saddle-ai-fov` feeds exact visible cells into fog-of-war memory | `cargo run -p saddle-world-fog-of-war-example-fov-integration` |
-| `saddle-world-fog-of-war-lab` | Crate-local lab with BRP and E2E hooks | `cargo run -p saddle-world-fog-of-war-lab` |
+| Example | Purpose | Run | E2E |
+| --- | --- | --- | --- |
+| `basic_2d` | Minimal room-and-corridor style overlay with one moving revealer and exploration memory | `cargo run -p saddle-world-fog-of-war-example-basic-2d` | `cargo run -p saddle-world-fog-of-war-example-basic-2d --features e2e -- basic_2d_memory_trail` |
+| `occlusion_2d` | Blocker-driven LOS example showing hidden cells behind walls | `cargo run -p saddle-world-fog-of-war-example-occlusion-2d` | `cargo run -p saddle-world-fog-of-war-example-occlusion-2d --features e2e -- occlusion_2d_wall_shadow` |
+| `rts_large_map` | Larger shared-layer shroud with many revealers and minimap reuse | `cargo run -p saddle-world-fog-of-war-example-rts-large-map` | `cargo run -p saddle-world-fog-of-war-example-rts-large-map --features e2e -- rts_large_map_multi_overlay` |
+| `projected_3d` | Same CPU truth rendered on a 3D ground-plane receiver | `cargo run -p saddle-world-fog-of-war-example-projected-3d` | `cargo run -p saddle-world-fog-of-war-example-projected-3d --features e2e -- projected_3d_projection_orbit` |
+| `vision_cones` | Arc-based revealers proving the crate is not limited to circles | `cargo run -p saddle-world-fog-of-war-example-vision-cones` | `cargo run -p saddle-world-fog-of-war-example-vision-cones --features e2e -- vision_cones_directional_arc` |
+| `fov_integration` | Cross-crate demo where `saddle-ai-fov` feeds exact visible cells into fog-of-war memory | `cargo run -p saddle-world-fog-of-war-example-fov-integration` | `cargo run -p saddle-world-fog-of-war-example-fov-integration --features e2e -- fov_integration_bridge` |
+| `saddle-world-fog-of-war-lab` | Crate-local integration lab with BRP and multi-surface E2E hooks | `cargo run -p saddle-world-fog-of-war-lab` | see commands below |
 
 ## Crate-Local Lab
 
-The workspace includes a richer lab app at `shared/world/saddle-world-fog-of-war/examples/lab`:
+The workspace includes a richer lab app at `crates/world/saddle-world-fog-of-war/examples/lab`:
 
 ```bash
 cargo run -p saddle-world-fog-of-war-lab
@@ -130,6 +130,8 @@ cargo run -p saddle-world-fog-of-war-lab --features e2e -- fog_of_war_occlusion
 cargo run -p saddle-world-fog-of-war-lab --features e2e -- fog_of_war_team_layers
 cargo run -p saddle-world-fog-of-war-lab --features e2e -- fog_of_war_3d_projection
 ```
+
+The focused example scenarios above verify each showcase in isolation. The lab stays valuable as the broader integration check that combines 3D projection, multiple layers, shared controls, and BRP inspection in one scene.
 
 ## BRP
 

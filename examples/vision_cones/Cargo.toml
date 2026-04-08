@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 
+[features]
+e2e = ["saddle-world-fog-of-war-example-support/e2e"]
+
 [dependencies]
 bevy = { workspace = true }
 saddle-world-fog-of-war = { workspace = true }

@@ -45,7 +45,9 @@ fn pause_motion(paused: bool) -> Action {
 }
 
 fn exploration_memory(enabled: bool) -> Action {
-    Action::Custom(Box::new(move |world| set_exploration_memory(world, enabled)))
+    Action::Custom(Box::new(move |world| {
+        set_exploration_memory(world, enabled)
+    }))
 }
 
 fn move_alpha(position: Vec2) -> Action {

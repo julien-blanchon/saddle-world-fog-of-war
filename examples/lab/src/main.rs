@@ -162,13 +162,15 @@ fn main() {
         bevy_input_focus::tab_navigation::TabNavigationPlugin,
         PanePlugin,
     ))
-        .register_pane::<LabControl>();
+    .register_pane::<LabControl>();
     app.add_systems(Startup, setup);
     app.add_systems(
         Update,
         (
-            sync_runtime_config.before(saddle_world_fog_of_war::FogOfWarSystems::CollectVisionSources),
-            sync_demo_controls.before(saddle_world_fog_of_war::FogOfWarSystems::CollectVisionSources),
+            sync_runtime_config
+                .before(saddle_world_fog_of_war::FogOfWarSystems::CollectVisionSources),
+            sync_demo_controls
+                .before(saddle_world_fog_of_war::FogOfWarSystems::CollectVisionSources),
             animate_scout_alpha,
             animate_scout_beta,
             animate_sentry,

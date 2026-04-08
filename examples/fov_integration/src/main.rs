@@ -1,5 +1,8 @@
 use std::collections::HashSet;
 
+#[cfg(feature = "e2e")]
+mod scenarios;
+
 use bevy::prelude::*;
 use saddle_ai_fov::{FovPlugin, GridFov, GridFovState, GridMapSpec, GridOpacityMap};
 use saddle_pane::prelude::*;
@@ -79,62 +82,67 @@ fn main() {
         DEMO_GRID.len() as u32,
     ));
 
-    App::new()
-        .insert_resource(ClearColor(Color::srgb(0.025, 0.028, 0.035)))
-        .insert_resource(build_grid_map())
-        .insert_resource(IntegrationPane::default())
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "fog_of_war fov_integration".into(),
-                resolution: (1280, 860).into(),
-                ..default()
-            }),
+    let mut app = App::new();
+    app.insert_resource(ClearColor(Color::srgb(0.025, 0.028, 0.035)));
+    app.insert_resource(build_grid_map());
+    app.insert_resource(IntegrationPane::default());
+    app.add_plugins(DefaultPlugins.set(WindowPlugin {
+        primary_window: Some(Window {
+            title: "fog_of_war fov_integration".into(),
+            resolution: (1280, 860).into(),
             ..default()
-        }))
-        .add_plugins((
-            bevy_flair::FlairPlugin,
-            bevy_input_focus::InputDispatchPlugin,
-            bevy_ui_widgets::UiWidgetsPlugins,
-            bevy_input_focus::tab_navigation::TabNavigationPlugin,
-            PanePlugin,
-        ))
-        .register_pane::<IntegrationPane>()
-        .add_plugins(FovPlugin::default())
-        .add_plugins((
-            FogOfWarPlugin::default().with_config(fog_config.clone()),
-            FogOfWarRenderingPlugin::default(),
-        ))
-        .configure_sets(
-            Update,
-            saddle_ai_fov::FovSystems::Recompute
-                .before(saddle_world_fog_of_war::FogOfWarSystems::CollectVisionSources),
-        )
-        .add_systems(Startup, move |mut commands: Commands| {
-            setup(&mut commands, &fog_config);
-        })
-        .add_systems(
-            Update,
-            animate_scout.before(saddle_ai_fov::FovSystems::MarkDirty),
-        )
-        .add_systems(
-            Update,
-            sync_controls.before(saddle_ai_fov::FovSystems::MarkDirty),
-        )
-        .add_systems(
-            Update,
-            sync_fov_to_fog
-                .after(saddle_ai_fov::FovSystems::Recompute)
-                .before(saddle_world_fog_of_war::FogOfWarSystems::CollectVisionSources),
-        )
-        .add_systems(
-            Update,
-            update_tiles.after(saddle_ai_fov::FovSystems::Recompute),
-        )
-        .add_systems(
-            Update,
-            update_monitors.after(saddle_world_fog_of_war::FogOfWarSystems::ApplyPersistence),
-        )
-        .run();
+        }),
+        ..default()
+    }));
+    app.add_plugins((
+        bevy_flair::FlairPlugin,
+        bevy_input_focus::InputDispatchPlugin,
+        bevy_ui_widgets::UiWidgetsPlugins,
+        bevy_input_focus::tab_navigation::TabNavigationPlugin,
+        PanePlugin,
+    ))
+    .register_pane::<IntegrationPane>();
+    app.add_plugins(FovPlugin::default());
+    app.add_plugins((
+        FogOfWarPlugin::default().with_config(fog_config.clone()),
+        FogOfWarRenderingPlugin::default(),
+    ));
+    app.configure_sets(
+        Update,
+        saddle_ai_fov::FovSystems::Recompute
+            .before(saddle_world_fog_of_war::FogOfWarSystems::CollectVisionSources),
+    );
+    app.add_systems(Startup, move |mut commands: Commands| {
+        setup(&mut commands, &fog_config);
+    });
+    app.add_systems(
+        Update,
+        animate_scout.before(saddle_ai_fov::FovSystems::MarkDirty),
+    );
+    app.add_systems(
+        Update,
+        sync_controls.before(saddle_ai_fov::FovSystems::MarkDirty),
+    );
+    app.add_systems(
+        Update,
+        sync_fov_to_fog
+            .after(saddle_ai_fov::FovSystems::Recompute)
+            .before(saddle_world_fog_of_war::FogOfWarSystems::CollectVisionSources),
+    );
+    app.add_systems(
+        Update,
+        update_tiles.after(saddle_ai_fov::FovSystems::Recompute),
+    );
+    app.add_systems(
+        Update,
+        update_monitors.after(saddle_world_fog_of_war::FogOfWarSystems::ApplyPersistence),
+    );
+    #[cfg(feature = "e2e")]
+    app.add_plugins(support::e2e_support::ExampleE2EPlugin::new(
+        scenarios::list,
+        scenarios::by_name,
+    ));
+    app.run();
 }
 
 fn build_grid_map() -> GridOpacityMap {
@@ -182,7 +190,10 @@ fn setup(commands: &mut Commands, fog_config: &saddle_world_fog_of_war::FogOfWar
         ReconScout,
         GridFov::new(4),
         VisionCellSource::new(FogLayerMask::bit(FogLayerId(0))),
-        Sprite::from_color(Color::srgb(0.40, 0.96, 0.72), Vec2::splat(grid.spec.cell_size.x * 0.58)),
+        Sprite::from_color(
+            Color::srgb(0.40, 0.96, 0.72),
+            Vec2::splat(grid.spec.cell_size.x * 0.58),
+        ),
         Transform::from_translation(scout_start),
         GlobalTransform::from_translation(scout_start),
     ));
@@ -291,9 +302,7 @@ fn sync_controls(
     overlay.edge_softness = pane.edge_softness;
 }
 
-fn sync_fov_to_fog(
-    scout: Single<(&GridFovState, &mut VisionCellSource), With<ReconScout>>,
-) {
+fn sync_fov_to_fog(scout: Single<(&GridFovState, &mut VisionCellSource), With<ReconScout>>) {
     let (fov_state, mut fog_source) = scout.into_inner();
     fog_source.cells.clone_from(&fov_state.visible_now);
 }

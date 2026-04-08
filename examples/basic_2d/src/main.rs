@@ -1,10 +1,13 @@
 use saddle_world_fog_of_war_example_support as support;
 
+#[cfg(feature = "e2e")]
+mod scenarios;
+
 use bevy::prelude::*;
 use saddle_pane::prelude::*;
 use saddle_world_fog_of_war::{
-    FogLayerId, FogOfWarMap, FogOfWarPlugin, FogOfWarRenderingPlugin, FogOverlay2d,
-    FogRevealShape, VisionSource,
+    FogLayerId, FogOfWarMap, FogOfWarPlugin, FogOfWarRenderingPlugin, FogOverlay2d, FogRevealShape,
+    VisionSource,
 };
 
 #[derive(Component)]
@@ -43,41 +46,46 @@ impl Default for BasicFogPane {
 fn main() {
     let config = support::config_2d(UVec2::new(28, 18));
 
-    App::new()
-        .insert_resource(BasicFogPane::default())
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "fog_of_war basic_2d".into(),
-                resolution: (1280, 820).into(),
-                ..default()
-            }),
+    let mut app = App::new();
+    app.insert_resource(BasicFogPane::default());
+    app.add_plugins(DefaultPlugins.set(WindowPlugin {
+        primary_window: Some(Window {
+            title: "fog_of_war basic_2d".into(),
+            resolution: (1280, 820).into(),
             ..default()
-        }))
-        .add_plugins((
-            bevy_flair::FlairPlugin,
-            bevy_input_focus::InputDispatchPlugin,
-            bevy_ui_widgets::UiWidgetsPlugins,
-            bevy_input_focus::tab_navigation::TabNavigationPlugin,
-            PanePlugin,
-        ))
-        .register_pane::<BasicFogPane>()
-        .add_plugins((
-            FogOfWarPlugin::default().with_config(config.clone()),
-            FogOfWarRenderingPlugin::default(),
-        ))
-        .add_systems(Startup, move |mut commands: Commands| {
-            setup(&mut commands, &config)
-        })
-        .add_systems(
-            Update,
-            sync_controls.before(saddle_world_fog_of_war::FogOfWarSystems::CollectVisionSources),
-        )
-        .add_systems(Update, animate_scout)
-        .add_systems(
-            Update,
-            update_pane.after(saddle_world_fog_of_war::FogOfWarSystems::ApplyPersistence),
-        )
-        .run();
+        }),
+        ..default()
+    }));
+    app.add_plugins((
+        bevy_flair::FlairPlugin,
+        bevy_input_focus::InputDispatchPlugin,
+        bevy_ui_widgets::UiWidgetsPlugins,
+        bevy_input_focus::tab_navigation::TabNavigationPlugin,
+        PanePlugin,
+    ))
+    .register_pane::<BasicFogPane>();
+    app.add_plugins((
+        FogOfWarPlugin::default().with_config(config.clone()),
+        FogOfWarRenderingPlugin::default(),
+    ));
+    app.add_systems(Startup, move |mut commands: Commands| {
+        setup(&mut commands, &config)
+    });
+    app.add_systems(
+        Update,
+        sync_controls.before(saddle_world_fog_of_war::FogOfWarSystems::CollectVisionSources),
+    );
+    app.add_systems(Update, animate_scout);
+    app.add_systems(
+        Update,
+        update_pane.after(saddle_world_fog_of_war::FogOfWarSystems::ApplyPersistence),
+    );
+    #[cfg(feature = "e2e")]
+    app.add_plugins(support::e2e_support::ExampleE2EPlugin::new(
+        scenarios::list,
+        scenarios::by_name,
+    ));
+    app.run();
 }
 
 fn setup(commands: &mut Commands, config: &saddle_world_fog_of_war::FogOfWarConfig) {
@@ -133,7 +141,11 @@ fn setup(commands: &mut Commands, config: &saddle_world_fog_of_war::FogOfWarConf
     );
 }
 
-fn animate_scout(time: Res<Time>, pane: Res<BasicFogPane>, mut scout: Query<&mut Transform, With<Scout>>) {
+fn animate_scout(
+    time: Res<Time>,
+    pane: Res<BasicFogPane>,
+    mut scout: Query<&mut Transform, With<Scout>>,
+) {
     if pane.pause_motion {
         return;
     }
@@ -159,10 +171,12 @@ fn sync_controls(
 }
 
 fn update_pane(map: Res<FogOfWarMap>, mut pane: ResMut<BasicFogPane>) {
-    let summary = map.layer_summary(FogLayerId(0)).unwrap_or(saddle_world_fog_of_war::FogLayerSummary {
-        visible_cells: 0,
-        explored_cells: 0,
-    });
+    let summary =
+        map.layer_summary(FogLayerId(0))
+            .unwrap_or(saddle_world_fog_of_war::FogLayerSummary {
+                visible_cells: 0,
+                explored_cells: 0,
+            });
     pane.visible_cells = summary.visible_cells;
     pane.explored_cells = summary.explored_cells;
 }

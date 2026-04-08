@@ -7,6 +7,7 @@ Crate-local standalone lab app for validating the shared `saddle-world-fog-of-wa
 - verify that the shared crate updates `Hidden`, `Explored`, and `Visible` states in a live app
 - keep one scene that exercises shared-team vision, arc revealers, blockers, and 3D projection together
 - expose stable named entities, overlay diagnostics, BRP resources, and screenshot hooks for E2E and manual debugging
+- complement the focused per-example E2E scenarios with one integrated validation scene
 
 ## Status
 
@@ -47,3 +48,4 @@ uv run --project .codex/skills/bevy-brp/script brp extras shutdown
 - The lab uses explicit top-level names for revealers, blockers, receivers, and the camera so BRP queries stay stable.
 - The scene keeps both a main projected receiver and a minimap receiver alive so one map resource proves multiple presentation surfaces.
 - Motion can be paused, exploration memory can be toggled between `ExploredMemory` and `NoMemory`, and layer selection can be changed through the pane or E2E custom actions, which keeps screenshot checkpoints deterministic.
+- The showcase examples now each ship their own `--features e2e -- <scenario>` entrypoint for targeted validation. Use this lab when you want the broader integration gate instead of a single-example check.
