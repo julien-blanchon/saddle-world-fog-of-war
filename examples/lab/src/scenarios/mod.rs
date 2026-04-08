@@ -15,6 +15,7 @@ struct ProjectionCameraSnapshot(Vec3);
 
 pub fn list_scenarios() -> Vec<&'static str> {
     vec![
+        "smoke_launch",
         "fog_of_war_smoke",
         "fog_of_war_exploration_memory",
         "fog_of_war_no_memory",
@@ -26,6 +27,7 @@ pub fn list_scenarios() -> Vec<&'static str> {
 
 pub fn scenario_by_name(name: &str) -> Option<Scenario> {
     match name {
+        "smoke_launch" => Some(smoke_launch()),
         "fog_of_war_smoke" => Some(fog_of_war_smoke()),
         "fog_of_war_exploration_memory" => Some(fog_of_war_exploration_memory()),
         "fog_of_war_no_memory" => Some(fog_of_war_no_memory()),
@@ -62,8 +64,16 @@ fn move_sentry(position: Vec2, facing: Vec2) -> Action {
     Action::Custom(Box::new(move |world| place_sentry(world, position, facing)))
 }
 
+fn smoke_launch() -> Scenario {
+    fog_of_war_smoke_named("smoke_launch")
+}
+
 fn fog_of_war_smoke() -> Scenario {
-    Scenario::builder("fog_of_war_smoke")
+    fog_of_war_smoke_named("fog_of_war_smoke")
+}
+
+fn fog_of_war_smoke_named(name: &'static str) -> Scenario {
+    Scenario::builder(name)
         .description("Boot the lab, verify fog resources initialize, and capture the default projection view.")
         .then(Action::WaitFrames(30))
         .then(assertions::custom("map resource exists", |world| {
@@ -83,9 +93,9 @@ fn fog_of_war_smoke() -> Scenario {
         .then(assertions::custom("selected layer defaults to zero", |world| {
             world.resource::<LabDiagnostics>().selected_layer == FogLayerId(0)
         }))
-        .then(Action::Screenshot("smoke".into()))
+        .then(Action::Screenshot(name.into()))
         .then(Action::WaitFrames(1))
-        .then(assertions::log_summary("fog_of_war_smoke"))
+        .then(assertions::log_summary(name))
         .build()
 }
 

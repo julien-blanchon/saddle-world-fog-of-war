@@ -22,6 +22,7 @@ cargo run -p saddle-world-fog-of-war-lab
 ## E2E
 
 ```bash
+cargo run -p saddle-world-fog-of-war-lab --features e2e -- smoke_launch
 cargo run -p saddle-world-fog-of-war-lab --features e2e -- fog_of_war_smoke
 cargo run -p saddle-world-fog-of-war-lab --features e2e -- fog_of_war_exploration_memory
 cargo run -p saddle-world-fog-of-war-lab --features e2e -- fog_of_war_no_memory
