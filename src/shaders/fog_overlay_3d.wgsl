@@ -24,6 +24,6 @@ fn mix_fog_color(state_value: f32) -> vec4<f32> {
 
 @fragment
 fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
-    let sampled = textureSample(fog_texture, fog_sampler, mesh.uv).r;
+    let sampled = textureSample(fog_texture, fog_sampler, vec2<f32>(mesh.uv.x, 1.0 - mesh.uv.y)).r;
     return mix_fog_color(sampled);
 }
